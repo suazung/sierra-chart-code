@@ -1,0 +1,322 @@
+// The top of every source code file must include this line
+#include "sierrachart.h"
+#include <vector>            // For using std::vector
+#include <sstream>           // For string manipulation
+
+
+#define CHECK_5LEVEL 1 
+#define CHECK_5LEVEL_AND_POCATBOTTOM 2 
+#define CHECK_5LEVEL_AND_POCATBOTTOM_AND_UPCANDLE 3
+#define CHECK_5LEVEL_AND_POCATTOP_AND_UPCANDLE 4  
+#define MAX_VECTOR_SIZE 500
+
+// Structure to represent an good buy OF start bar
+struct st_GoodBuyOFStartBar {
+    int index;
+    SCDateTime time;
+    float volume;
+    //bool bullish; // true for bullish, false for bearish
+
+    //EngulfingPattern(int idx, SCDateTime t, float v, bool bull) : index(idx), time(t), volume(v), bullish(bull) {}
+	st_GoodBuyOFStartBar(int idx, SCDateTime t, float v) : index(idx), time(t), volume(v) {}
+};
+
+int isThisStartBarOFGoodBuyOrderflow(SCStudyInterfaceRef sc , int startIndex);
+
+bool checkValidBar(SCStudyInterfaceRef sc , int idx , int condition);
+
+void findGoodBuyOrderFlow(SCStudyInterfaceRef sc);
+
+std::vector<st_GoodBuyOFStartBar> detectedGoodBuyStartBars;
+
+
+SCDLLName("SUA FIND GOOD BUY OF")
+
+SCSFExport scsf_FindGoodBuyOF(SCStudyInterfaceRef sc)
+{
+	
+
+	SCString msg;
+	SCInputRef i_minVol = sc.Input[0];
+	
+	//std::vector<st_GoodBuyOFStartBar> detectedGoodBuyStartBars;
+	
+	// Section 1 - Set the configuration variables and defaults
+	if (sc.SetDefaults)
+	{
+		sc.GraphName = "SUA FIND GOOD BUY OF";
+
+		sc.AutoLoop = 0;  //Automatic looping is enabled. 
+		
+		sc.GraphRegion = 0;
+		
+		sc.Subgraph[0].Name = "Good buy start buy";
+		sc.Subgraph[0].DrawStyle = DRAWSTYLE_LINE;
+		sc.Subgraph[0].PrimaryColor = RGB (0, 255, 0);
+		
+		i_minVol.Name = "Min Volime Of good buy orderflow start bar";
+		i_minVol.SetInt(0);
+		
+		return;
+	}
+	
+	
+	// Section 2 - Do data processing here
+	
+	//msg.Format("My lucky number is %d" , luckyNumber.GetInt() );
+	//sc.AddMessageToLog(msg,1);
+	
+	// Ensure full recalculation on load
+    //sc.UpdateAlways = 1;
+	
+	int minVol = i_minVol.GetInt();
+	int startIndex = sc.UpdateStartIndex;
+	int length = 1;
+	
+    /*if (startIndex < length - 1) {
+        startIndex = length - 1;
+    }*/
+	
+	// Vector to store detected good buy start bar patterns
+    //std::vector<st_GoodBuyOFStartBar> detectedGoodBuyStartBars;
+	
+	 // 1.Loop through bars to detect good buy start bar pattern
+    for (int i = startIndex; i < sc.ArraySize; ++i) 
+	{
+		
+		// Check if this is a new bar
+		if (sc.GetBarHasClosedStatus(i) == BHCS_BAR_HAS_NOT_CLOSED) {
+            continue;
+        }
+		
+		bool isItStartBarOFGoodBuyOrderflow = checkValidBar(sc , i ,CHECK_5LEVEL_AND_POCATBOTTOM);
+		
+		if(isItStartBarOFGoodBuyOrderflow)
+		{
+			SCDateTime time = sc.BaseDateTimeIn[i];
+            float vol = sc.Volume[i];
+
+            // Create an EngulfingPattern object and add it to the vector
+            st_GoodBuyOFStartBar goodBuyStartBar(i, time, vol);
+            detectedGoodBuyStartBars.push_back(goodBuyStartBar);
+			
+			// Ensure the vector does not exceed the maximum size
+			if (detectedGoodBuyStartBars.size() > MAX_VECTOR_SIZE) {
+				detectedGoodBuyStartBars.erase(detectedGoodBuyStartBars.begin());
+			}
+		
+		}
+		
+		// 2. find end bar of good buy OF
+		findGoodBuyOrderFlow(sc);
+		
+	
+	}
+	
+	 
+	
+	
+	
+}
+
+bool checkValidBar(SCStudyInterfaceRef sc , int idx , int condition)
+{
+	const s_VolumeAtPriceV2* p_vap = NULL;	
+	int numPriceLevel = sc.VolumeAtPriceForBars->GetSizeAtBarIndex(idx) ;	
+	int vol;	
+	int levelOFHighestVol ;	
+	int highestVol = 0;	
+		
+	if(condition == CHECK_5LEVEL)
+	{
+		if(numPriceLevel == 5)
+			return true;
+		else
+			return false;
+	}
+	else if(condition == CHECK_5LEVEL_AND_POCATBOTTOM)
+	{
+		if(numPriceLevel == 5)
+		{}
+	    else return false;
+		
+		// find POC level
+		for(int pocLevel = 0 ; pocLevel < numPriceLevel ; pocLevel++)
+		{
+					
+			sc.VolumeAtPriceForBars->GetVAPElementAtIndex(idx , pocLevel ,&p_vap );
+			
+			if(p_vap->Volume > highestVol)
+			{
+				highestVol = p_vap->Volume ;
+				levelOFHighestVol = pocLevel;
+				
+			}			
+			
+			vol = p_vap->Volume ;		
+			
+		}
+		
+		if(levelOFHighestVol <= 1) return true;
+		else return false;
+	}
+	else if(condition == CHECK_5LEVEL_AND_POCATBOTTOM_AND_UPCANDLE)
+	{
+		
+	}
+	else if(condition == CHECK_5LEVEL_AND_POCATTOP_AND_UPCANDLE)
+	{
+		// check is 5 level ?
+		if(numPriceLevel == 5);
+			//return true;
+		else
+			return false;
+		
+		// check is up candle ?
+		if ( (sc.Close[idx] - sc.Low[idx]) > 0);
+			//return true;
+	    else
+	   	   return false;
+	   		
+		// find POC level
+		for(int pocLevel = 0 ; pocLevel < numPriceLevel ; pocLevel++)
+		{
+					
+			sc.VolumeAtPriceForBars->GetVAPElementAtIndex(idx , pocLevel ,&p_vap );
+			
+			if(p_vap->Volume > highestVol)
+			{
+				highestVol = p_vap->Volume ;
+				levelOFHighestVol = pocLevel;
+				
+			}			
+			
+			vol = p_vap->Volume ;		
+			
+		}
+		
+		if(levelOFHighestVol >= 3) return true;
+		else return false;
+		
+	}
+	
+	return false;
+	
+}
+
+
+void findGoodBuyOrderFlow(SCStudyInterfaceRef sc)
+{
+	
+	int vectorSize = detectedGoodBuyStartBars.size();
+	
+	// Log the detected good buy start bar
+    for (int i = 0 ; i < vectorSize ; ++i) 
+	{		        
+
+        // Format the SCDateTime to a string
+        SCString DateTimeString = sc.DateTimeToString(detectedGoodBuyStartBars[i].time , FLAG_DT_COMPLETE_DATETIME);
+		
+		int startBarIndex = detectedGoodBuyStartBars[i].index;
+		
+        // 2.1 Log the detected good buy start bar
+        std::ostringstream oss;
+        oss << "Good buy OF Start pattern detected"
+            << " - Index: " << startBarIndex
+            << " - Time: " << DateTimeString
+            << " - Volume: " << detectedGoodBuyStartBars[i].volume;
+        sc.AddMessageToLog(oss.str().c_str(), 0);
+		
+		// 2.2 loop from index of detected good buy start bar to sc.ArraySize -1
+		
+		oss << "index of start buy OF = " << startBarIndex << " | sc.ArraySize-1 = " << sc.ArraySize-1;
+		sc.AddMessageToLog(oss.str().c_str(), 0);
+		
+		for(int j = startBarIndex+1 ; j < sc.ArraySize-1 ; ++j )
+		{
+			
+			// 2.3 find end buy orderflow which must have 
+			// - low more than high of start OF - 0.0001
+			// - must not have low more than high of start OF + 0.0001
+			if( (sc.Low[j] >= sc.High[startBarIndex] - 0.00011) && (sc.Low[j] <= sc.High[startBarIndex] + 0.00011) )
+			{
+				oss << "index " << j << "have correct distance with high of " << startBarIndex ;
+				sc.AddMessageToLog(oss.str().c_str(), 0);
+				
+				// 2.4 after found correct distance , now find it up candle + 5 level + poc on top 
+				if( checkValidBar(sc , j , CHECK_5LEVEL_AND_POCATTOP_AND_UPCANDLE) == true ) 
+				{
+					oss << "have good buy OF index " << startBarIndex << " then " << j ;
+					sc.AddMessageToLog(oss.str().c_str(), 0);
+					
+					// for LineNumber
+					int Date = sc.BaseDateTimeIn.DateAt(startBarIndex);
+					
+					// 2.5 draw rectangle
+					s_UseTool rectangle;
+					rectangle.Clear();
+					rectangle.ChartNumber = sc.ChartNumber;
+					rectangle.DrawingType = DRAWING_RECTANGLEHIGHLIGHT ;
+					//rectangle.BeginDateTime = sc.BaseDateTimeIn[idx] ;
+					rectangle.BeginIndex = startBarIndex ;
+					//rectangle.EndDateTime = sc.BaseDateTimeIn[j] ;
+					rectangle.EndIndex = j ;
+					rectangle.BeginValue = sc.High[j] ;
+					rectangle.EndValue = sc.Low[startBarIndex];
+					rectangle.Color = RGB(255,0,0);
+					rectangle.LineWidth = 1;
+					rectangle.TransparencyLevel = 100;
+					rectangle.AddMethod = UTAM_ADD_OR_ADJUST;
+					rectangle.LineNumber = 7889+startBarIndex+j;  // Unique line number for the first rectangle
+
+					sc.UseTool(rectangle);
+					
+					
+					
+					//oss << "convert leftIntTime = " << Date /*<< " to date " << Date.ToString()*/ ;
+					//sc.AddMessageToLog(oss.str().c_str(), 0);
+					
+				}
+				else
+				{
+					
+				}
+			}
+			else
+			{
+				continue;
+			}
+			
+			/*
+			if( sc.Low[i] < sc.Low[idx] )
+			{
+				oss << "index " << i << "break low of " << idx ;
+				sc.AddMessageToLog(oss.str().c_str(), 0);
+				
+				it = detectedGoodBuyStartBars.erase(it);
+				
+				oss << "erase " << idx << " already " ;
+				sc.AddMessageToLog(oss.str().c_str(), 0);
+				
+				break;
+			}*/
+			
+		}
+		
+		// Move to the next element
+		//++it;
+	
+	}
+		
+	
+}
+
+
+int isThisStartBarOFGoodBuyOrderflow(SCStudyInterfaceRef sc , int startIndex)
+{
+	
+	
+	return -1 ;
+}
+
+
