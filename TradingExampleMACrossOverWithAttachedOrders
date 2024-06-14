@@ -1,0 +1,134 @@
+// it in TradingSystem.cpp
+
+SCSFExport scsf_TradingExampleMACrossOverWithAttachedOrders(SCStudyInterfaceRef sc)
+{
+	// Define references to the Subgraphs and Inputs for easy reference
+	SCSubgraphRef Subgraph_BuyEntry = sc.Subgraph[0];
+	SCSubgraphRef Subgraph_SellEntry = sc.Subgraph[1];
+	SCSubgraphRef Subgraph_FastSimpMovAvg = sc.Subgraph[4];
+	SCSubgraphRef Subgraph_SlowSimpMovAvg = sc.Subgraph[5];
+
+	SCInputRef Input_Enabled = sc.Input[0];
+
+
+	if (sc.SetDefaults)
+	{
+		// Set the study configuration and defaults.
+
+		sc.GraphName = "Trading Example: Moving Average Crossover with Attached Orders";
+
+		Subgraph_BuyEntry.Name = "Buy Entry";
+		Subgraph_BuyEntry.DrawStyle = DRAWSTYLE_ARROW_UP;
+		Subgraph_BuyEntry.PrimaryColor = RGB(0, 255, 0);
+		Subgraph_BuyEntry.LineWidth = 2;
+		Subgraph_BuyEntry.DrawZeros = false;
+
+		Subgraph_SellEntry.Name = "Sell Entry";
+		Subgraph_SellEntry.DrawStyle = DRAWSTYLE_ARROW_DOWN;
+		Subgraph_SellEntry.PrimaryColor = RGB(255, 0, 0);
+		Subgraph_SellEntry.LineWidth = 2;
+		Subgraph_SellEntry.DrawZeros = false;
+
+		Subgraph_FastSimpMovAvg.Name = "Fast Moving Average";
+		Subgraph_FastSimpMovAvg.DrawStyle = DRAWSTYLE_LINE;
+		Subgraph_FastSimpMovAvg.PrimaryColor = RGB(255, 255, 255);
+		Subgraph_FastSimpMovAvg.DrawZeros = false;
+		Subgraph_FastSimpMovAvg.LineWidth = 2;
+
+		Subgraph_SlowSimpMovAvg.Name = "Slow Moving Average";
+		Subgraph_SlowSimpMovAvg.DrawStyle = DRAWSTYLE_LINE;
+		Subgraph_SlowSimpMovAvg.PrimaryColor = RGB(0, 255, 0);
+		Subgraph_SlowSimpMovAvg.DrawZeros = false;
+		Subgraph_SlowSimpMovAvg.LineWidth = 2;
+
+		Input_Enabled.Name = "Enabled";
+		Input_Enabled.SetYesNo(0); 
+
+
+		sc.AllowMultipleEntriesInSameDirection = false; 
+		sc.MaximumPositionAllowed = 2;
+		sc.SupportReversals = false;
+
+		// This is false by default. Orders will go to the simulation system always.
+		sc.SendOrdersToTradeService = false;
+
+		sc.AllowOppositeEntryWithOpposingPositionOrOrders = false;
+
+		// This can be false in this function because we specify Attached Orders directly with the order which causes this to be considered true when submitting an order.
+		sc.SupportAttachedOrdersForTrading = false;  
+
+		sc.CancelAllOrdersOnEntriesAndReversals= false;
+		sc.AllowEntryWithWorkingOrders = false;
+		sc.CancelAllWorkingOrdersOnExit = true;
+
+		// Only 1 trade for each Order Action type is allowed per bar.
+		sc.AllowOnlyOneTradePerBar = true; 
+
+		//This needs to be set to true when a trading study uses trading functions.
+		sc.MaintainTradeStatisticsAndTradesData = true;
+
+		sc.AutoLoop = 1;
+		sc.GraphRegion = 0;
+
+		return;
+	}
+
+	if (!Input_Enabled.GetYesNo())
+		return;
+	
+
+	// Use persistent variables to remember attached order IDs so they can be modified or canceled. 
+	int& Target1OrderID = sc.GetPersistentInt(1);
+	int& Stop1OrderID = sc.GetPersistentInt(2);
+
+	// Calculate the moving average
+	sc.SimpleMovAvg(sc.Close, Subgraph_FastSimpMovAvg, 10);
+	sc.SimpleMovAvg(sc.Close, Subgraph_SlowSimpMovAvg, 20);
+
+	s_SCPositionData PositionData;
+	sc.GetTradePosition(PositionData);
+	if(PositionData.PositionQuantity != 0)
+		return;
+
+	// Create an s_SCNewOrder object. 
+	s_SCNewOrder NewOrder;
+	NewOrder.OrderQuantity = 1;
+	NewOrder.OrderType = SCT_ORDERTYPE_MARKET;
+	NewOrder.TimeInForce = SCT_TIF_GOOD_TILL_CANCELED;
+
+	//Specify a Target and a Stop with 8 tick offsets. We are specifying one Target and one Stop, additional targets and stops can be specified as well. 
+	NewOrder.Target1Offset = 8*sc.TickSize;
+	NewOrder.Stop1Offset = 8*sc.TickSize;
+	NewOrder.OCOGroup1Quantity = 1; // If this is left at the default of 0, then it will be automatically set.
+
+	// Buy when the last price crosses the moving average from below.
+	if (sc.CrossOver(Subgraph_FastSimpMovAvg, Subgraph_SlowSimpMovAvg) == CROSS_FROM_BOTTOM && sc.GetBarHasClosedStatus() == BHCS_BAR_HAS_CLOSED)
+	{
+		int Result = static_cast<int>(sc.BuyEntry(NewOrder));
+		if (Result > 0) //If there has been a successful order entry, then draw an arrow at the low of the bar.
+		{
+			Subgraph_BuyEntry[sc.Index] = sc.Low[sc.Index];
+
+			// Remember the order IDs for subsequent modification and cancellation
+			Target1OrderID = NewOrder.Target1InternalOrderID;
+			Stop1OrderID = NewOrder.Stop1InternalOrderID;
+		}
+	}
+
+
+	// Sell when the last price crosses the moving average from above.
+	else if (sc.CrossOver(Subgraph_FastSimpMovAvg, Subgraph_SlowSimpMovAvg) == CROSS_FROM_TOP && sc.GetBarHasClosedStatus() == BHCS_BAR_HAS_CLOSED)
+	{
+		int Result = static_cast<int>(sc.SellEntry(NewOrder));
+		if (Result > 0) //If there has been a successful order entry, then draw an arrow at the high of the bar.
+		{
+			Subgraph_SellEntry[sc.Index] = sc.High[sc.Index];
+
+			// Remember the order IDs for subsequent modification and cancellation
+			Target1OrderID = NewOrder.Target1InternalOrderID;
+			Stop1OrderID = NewOrder.Stop1InternalOrderID;
+		}
+	}
+
+
+}
