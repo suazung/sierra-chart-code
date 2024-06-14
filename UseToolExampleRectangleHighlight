@@ -1,0 +1,54 @@
+// it in Studies.cpp
+
+SCSFExport scsf_UseToolExampleRectangleHighlight(SCStudyInterfaceRef sc)
+{
+	// Draw a rectangle highlight
+
+	// Set configuration variables
+	if (sc.SetDefaults)
+	{
+		sc.GraphName = "UseTool Example: Rectangle Highlight";
+		sc.GraphRegion = 0;
+		
+		sc.AutoLoop = 0; //No automatic looping
+
+		return;
+	}
+
+	if (sc.LastCallToFunction)
+		return;
+
+	// Do data processing	
+	int BarIndex = 0;
+
+	int& r_LineNumber = sc.GetPersistentInt(1);
+
+	s_UseTool Tool;
+
+	//Tool.ChartNumber = sc.ChartNumber;
+	Tool.DrawingType = DRAWING_RECTANGLEHIGHLIGHT;	
+
+	if (r_LineNumber != 0)
+		Tool.LineNumber = r_LineNumber;
+
+	// Update BarIndex to 30 bars from the end
+	BarIndex = max(sc.ArraySize - 25, 0);
+	Tool.BeginDateTime = sc.BaseDateTimeIn[BarIndex];
+	BarIndex = max(sc.ArraySize - 15, 0);
+	Tool.EndDateTime = sc.BaseDateTimeIn[BarIndex];
+	Tool.BeginValue = sc.GetHighest(sc.Low, BarIndex, 10);
+	Tool.EndValue = sc.GetLowest(sc.Low, BarIndex, 10);
+	Tool.Color = RGB(255, 0, 0);  // Red
+	Tool.LineWidth = 1; //To see the outline this must be 1 or greater.
+	Tool.SecondaryColor = RGB(0, 255, 0);
+	Tool.TransparencyLevel = 50;
+	Tool.AddMethod = UTAM_ADD_OR_ADJUST;
+
+	// Add rectangle drawing to chart number 2.
+	Tool.AddAsUserDrawnDrawing = 1;
+	Tool.ChartNumber = 2;
+
+	sc.UseTool(Tool);
+
+	r_LineNumber = Tool.LineNumber;//Remember line number which has been automatically set
+}
