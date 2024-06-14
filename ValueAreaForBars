@@ -1,0 +1,51 @@
+SCSFExport scsf_ValueAreaForBars(SCStudyInterfaceRef sc)
+{
+	SCSubgraphRef Subgraph_ValueAreaHigh = sc.Subgraph[0];
+	SCSubgraphRef Subgraph_ValueAreaLow = sc.Subgraph[1];
+	
+	SCInputRef Input_ValueAreaPercentage = sc.Input[0];
+
+	if (sc.SetDefaults)
+	{
+		// Set the configuration and defaults
+
+		sc.GraphName = "Volume Value Area for Bars";
+
+		sc.AutoLoop = 0;
+		sc.MaintainVolumeAtPriceData = true;
+
+		sc.GraphRegion = 0;
+
+		Subgraph_ValueAreaHigh.Name = "VAH";
+		Subgraph_ValueAreaHigh.DrawStyle = DRAWSTYLE_SQUARE_OFFSET_LEFT_FOR_CANDLESTICK;
+		Subgraph_ValueAreaHigh.LineWidth = 8;
+		Subgraph_ValueAreaHigh.PrimaryColor = RGB(255, 128, 0);
+
+		Subgraph_ValueAreaLow.Name = "VAL";
+		Subgraph_ValueAreaLow.DrawStyle = DRAWSTYLE_SQUARE_OFFSET_LEFT_FOR_CANDLESTICK;
+		Subgraph_ValueAreaLow.LineWidth = 8;
+		Subgraph_ValueAreaLow.PrimaryColor = RGB(255, 0, 128);
+
+		Input_ValueAreaPercentage.Name = "Value Area Percentage";
+		Input_ValueAreaPercentage.SetFloat(70.0f);
+
+
+		return;
+	}
+
+
+	// Do data processing
+	for (int BarIndex = sc.UpdateStartIndex; BarIndex < sc.ArraySize; BarIndex++)
+	{
+		double PointOfControl = 0.0f;
+		double ValueAreaHigh = 0.0f;
+		double ValueAreaLow = 0.0f;
+
+		sc.GetPointOfControlAndValueAreaPricesForBar(BarIndex, PointOfControl, ValueAreaHigh, ValueAreaLow, Input_ValueAreaPercentage.GetFloat());
+
+
+		Subgraph_ValueAreaHigh.Data[BarIndex] = static_cast <float> (ValueAreaHigh);
+		Subgraph_ValueAreaLow.Data[BarIndex] = static_cast <float> (ValueAreaLow);
+	}
+
+}
