@@ -1,0 +1,305 @@
+#include  <iterator>
+
+#include "sierrachart.h"
+#include "scstudyfunctions.h"
+
+
+
+/*==========================================================================*/
+SCSFExport scsf_MarketStructure(SCStudyInterfaceRef sc)
+{
+	SCFloatArrayRef High = sc.High;
+	SCFloatArrayRef Low = sc.Low;
+	SCFloatArrayRef Open = sc.Open;
+	SCFloatArrayRef Close = sc.Close;
+
+	SCSubgraphRef MSH = sc.Subgraph[0];
+	SCSubgraphRef MSL = sc.Subgraph[1];
+	SCSubgraphRef Labels = sc.Subgraph[2];
+	SCSubgraphRef BarTypes = sc.Subgraph[3];
+
+	SCInputRef DrawLabels = sc.Input[0];
+	SCInputRef LabelsOffset = sc.Input[1];
+	SCInputRef DisplayPriceValues = sc.Input[2];
+	
+	// Set configuration variables
+	if (sc.SetDefaults)
+	{
+
+		sc.GraphName="Market Structure MSL/MSH";
+		
+
+		sc.GraphRegion = 0; // Use the main price graph region
+
+		MSH.Name = "MSH";
+		MSH.PrimaryColor = RGB(255,0 ,255); 
+		MSH.DrawStyle = DRAWSTYLE_COLORBAR;
+		MSH.LineWidth = 2;
+		MSH.DrawZeros = false;
+
+		MSL.Name = "MSL";
+		MSL.PrimaryColor = RGB(255, 128, 0);
+		MSL.DrawStyle = DRAWSTYLE_COLORBAR;
+		MSL.LineWidth = 2;
+		MSL.DrawZeros = false;
+
+		Labels.Name = "Labels";
+		Labels.DrawStyle = DRAWSTYLE_CUSTOM_TEXT;
+		Labels.PrimaryColor = RGB(255, 0 ,255);
+		Labels.SecondaryColor = RGB(255, 128, 0);
+		Labels.LineWidth = 10;
+		Labels.SecondaryColorUsed = true;
+		Labels.DrawZeros = false;
+
+		DrawLabels.Name = "Draw Labels";
+		DrawLabels.SetYesNo(true);
+
+		LabelsOffset.Name = "Text Labels Percentage Offset";
+		LabelsOffset.SetFloat(5.0f);
+
+
+		DisplayPriceValues.Name = "Display Price Values";
+		DisplayPriceValues.SetYesNo(0);
+
+		sc.AutoLoop				= 1;
+
+		return;
+	}
+
+	// define constants
+	enum MarketStructureValues
+	{
+		NONE	= 0,
+		HH		= 1,
+		LH		= 2,
+		LL		= 3,
+		HL		= 4
+	};
+
+	enum BarTypeValues
+	{
+		BT_DOWN,
+		BT_UP,
+		BT_NEUTRAL
+	};
+
+	const int UniqueID	= 1546846579;
+
+
+	if(Close[sc.Index] < Open[sc.Index])
+		BarTypes[sc.Index] = BT_DOWN;
+	else 
+		if(Close[sc.Index] > Open[sc.Index])
+			BarTypes[sc.Index] = BT_UP;
+		else
+			BarTypes[sc.Index] = BT_NEUTRAL;
+
+	// we need at least 3 bars
+	if(sc.Index < 2)
+		return;
+
+	sc.DataStartIndex = 2;
+
+	// Start calculations here
+	int CurrentIndex = sc.Index - 1;
+
+	if(BarTypes[CurrentIndex-2] == BT_DOWN && 
+		BarTypes[CurrentIndex-1] == BT_DOWN &&
+		BarTypes[CurrentIndex] == BT_UP)
+	{
+		// these three bars can make MSL
+		if(Low[CurrentIndex-2] > Low[CurrentIndex-1] && 
+			Low[CurrentIndex] > Low[CurrentIndex-1])
+		{
+			// this is MSL
+			MSL[CurrentIndex-1] = 1;
+		}
+	}
+
+	if(BarTypes[CurrentIndex-2] == BT_UP && 
+		BarTypes[CurrentIndex-1] == BT_UP &&
+		BarTypes[CurrentIndex] == BT_DOWN)
+	{
+		// these three bars can make MSH
+		if(High[CurrentIndex-2] < High[CurrentIndex-1] && 
+			High[CurrentIndex] < High[CurrentIndex-1])
+		{
+			// this is MSH
+			MSH[CurrentIndex-1] = 1;
+		}
+	}
+
+	// Fill Labels array
+	if(MSH[CurrentIndex-1] == 1)
+	{
+		// look back through Labels array to find previous label HH or LH
+		int Index=CurrentIndex-1;
+		for(; Index >= 0; Index--)
+		{
+			if(Labels[Index] == HH || Labels[Index] == LH)
+				break;
+		}
+
+		// now Index store index of the element
+		if(Index < 0)	// this is a first label, assume HH
+			Labels[CurrentIndex-1]	= HH;
+		else
+		{
+			// compare High values
+			if(High[Index] == High[CurrentIndex-1])
+				Labels[CurrentIndex-1] = Labels[Index];
+			else
+				if(High[Index] < High[CurrentIndex-1])
+					Labels[CurrentIndex-1]	= HH;
+				else
+					Labels[CurrentIndex-1]	= LH;
+		}
+	}
+
+
+	if(MSL[CurrentIndex-1] == 1)
+	{
+		// look back through Labels array to find previous label LL or HL
+		int Index=CurrentIndex-1;
+		for(; Index >= 0; Index--)
+		{
+			if(Labels[Index] == LL || Labels[Index] == HL)
+				break;
+		}
+
+		// now Index store index of the element
+		if(Index < 0)	// this is a first label, assume LL
+			Labels[CurrentIndex-1]	= LL;
+		else
+		{
+			// compare Low values
+			if(Low[Index] == Low[CurrentIndex-1])
+				Labels[CurrentIndex-1] = Labels[Index];
+			else
+				if(Low[Index] > Low[CurrentIndex-1])
+					Labels[CurrentIndex-1]	= LL;
+				else
+					Labels[CurrentIndex-1]	= HL;
+		}
+	}
+
+
+	// check if we need draw labels
+	if(!DrawLabels.GetYesNo())
+		return;
+
+	// if pattern is not set do not add the empty label
+	if(Labels[sc.Index-2] == 0)
+		return;
+
+
+	// Since we are using UTAM_ADD_ALWAYS, we must not attempt to draw labels when we are on the last bar, even if the labels do not appear on the last bar. Otherwise, we get the same label added again and again as the bar is updated. 
+	if(sc.GetBarHasClosedStatus(sc.Index) == BHCS_BAR_HAS_NOT_CLOSED)
+		return;
+
+	s_UseTool Tool;
+	Tool.Clear(); // reset tool structure for our next use
+	Tool.ChartNumber	= sc.ChartNumber;
+	Tool.DrawingType	= DRAWING_TEXT;
+	Tool.Region			= sc.GraphRegion;
+	Tool.FontFace= "Arial"; 
+	Tool.FontBold= true;
+
+	Tool.ReverseTextColor = 0;
+	Tool.FontSize = Labels.LineWidth;
+
+	Tool.LineNumber = UniqueID;
+	Tool.BeginIndex =sc.Index-2;
+
+	SCString	Label;
+	SCString	Value;
+
+	float Offset = LabelsOffset.GetFloat()*0.01f*(sc.High[sc.Index - 2]-sc.Low[sc.Index - 2]);
+
+
+	switch((int)Labels[sc.Index-2])
+	{
+	case HH:
+		{
+			if(!DisplayPriceValues.GetYesNo())
+			{
+				Label = "HH";
+			}
+			else
+			{
+				Value = sc.FormatGraphValue(sc.High[sc.Index-2], sc.BaseGraphValueFormat);
+				Label.Format("HH %s", Value.GetChars());
+			}
+			Tool.Text			= Label;
+			Tool.Color			= Labels.PrimaryColor;
+			
+			Tool.BeginValue		= sc.High[sc.Index-2] + Offset;
+			Tool.TextAlignment	= DT_CENTER | DT_BOTTOM;
+			break;
+		}
+
+	case LH:
+		{
+			if(!DisplayPriceValues.GetYesNo())
+			{
+				Label = "LH";
+			}
+			else
+			{
+				Value = sc.FormatGraphValue(sc.High[sc.Index-2], sc.BaseGraphValueFormat);
+				Label.Format("LH %s", Value.GetChars());
+			}
+			Tool.Text			= Label;
+			Tool.Color			= Labels.PrimaryColor;
+
+			Tool.BeginValue		= sc.High[sc.Index-2] + Offset;
+			Tool.TextAlignment	= DT_CENTER | DT_BOTTOM;
+			break;
+		}
+
+	case LL:
+		{
+			if(!DisplayPriceValues.GetYesNo())
+			{
+				Label = "LL";
+			}
+			else
+			{
+				Value = sc.FormatGraphValue(sc.Low[sc.Index-2], sc.BaseGraphValueFormat);
+				Label.Format("LL %s", Value.GetChars());
+			}
+			Tool.Text			= Label;
+			Tool.Color			= Labels.SecondaryColor;
+			
+			Tool.BeginValue		= sc.Low[sc.Index-2] - Offset;
+			Tool.TextAlignment	= DT_CENTER | DT_TOP;
+			break;
+		}
+
+	case HL:
+		{
+			if(!DisplayPriceValues.GetYesNo())
+			{
+				Label = "HL";
+			}
+			else
+			{
+				Value = sc.FormatGraphValue(sc.Low[sc.Index-2], sc.BaseGraphValueFormat);
+				Label.Format("HL %s", Value.GetChars());
+			}
+			Tool.Text			= Label;
+			Tool.Color			= Labels.SecondaryColor;
+			
+			Tool.BeginValue		= sc.Low[sc.Index-2] - Offset;
+			Tool.TextAlignment	= DT_CENTER | DT_TOP;
+			break;
+		}
+
+	default:
+		return;
+	}
+
+	Tool.AddMethod = UTAM_ADD_ALWAYS;
+
+	sc.UseTool(Tool);
+}
