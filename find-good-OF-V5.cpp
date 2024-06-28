@@ -152,13 +152,44 @@ SCSFExport scsf_FindGoodBuyOF(SCStudyInterfaceRef sc)
 		}
 		
 		// 2. find end bar of good buy OF
-		findGoodBuyOrderFlow(sc , *detectedGoodBuyStartBars);
+		//findGoodBuyOrderFlow(sc , *detectedGoodBuyStartBars);
 		
 	
 	}
 	
-	 
+	 // 2. find end bar of good buy OF
+	findGoodBuyOrderFlow(sc , *detectedGoodBuyStartBars);
 	
+	SCString filePath = sc.DataFilesFolder() + "CollectedData.txt";
+
+    // Open the file in append mode
+    std::ofstream outputFile;
+    if (sc.Index == 0)
+    {
+        // If it's the first bar, overwrite the file
+        outputFile.open(filePath.GetChars(), std::ios::out);
+    }
+    else
+    {
+        // Otherwise, append to the file
+        outputFile.open(filePath.GetChars(), std::ios::app);
+    }
+
+    // Check if the file opened successfully
+    if (!outputFile.is_open())
+    {
+        SCString error;
+        error.Format("Failed to open file: %s", filePath.GetChars());
+        sc.AddMessageToLog(error, 1);
+        return;
+    }
+
+    // Write the data to the file
+    outputFile << "Bar Index: " << "\n";
+
+    // Close the file
+    outputFile.close();
+
 	
 	
 }
