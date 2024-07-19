@@ -1,0 +1,271 @@
+// The top of every source code file must include this line
+#include "sierrachart.h"
+
+
+#define MAX_VECTOR_SIZE 10000
+
+SCDLLName("SUA FIND DT DB")
+
+
+int uniqueNumber = 3435342 ;
+
+// Structure to represent an PivotHigh
+struct st_PivotHigh {
+    int index;
+	int lineNumber;
+   
+	st_PivotHigh(int idx , int ln) : index(idx) ,lineNumber(ln) {}
+};
+
+// Structure to represent an PivotLow
+struct st_PivotLow {
+    int index;
+	int lineNumber;
+   
+	st_PivotLow(int idx , int ln) : index(idx) ,lineNumber(ln) {}
+};
+
+
+bool iSPivotHigh(SCStudyInterfaceRef sc , int index, int pivotLength) ;
+bool iSPivotLow(SCStudyInterfaceRef sc , int index, int pivotLength) ;
+
+
+//This is the basic framework of a study function. Change the name 'TemplateFunction' to what you require.
+SCSFExport scsf_FindDtDb(SCStudyInterfaceRef sc)
+{
+	
+	SCString msg;
+	
+	SCInputRef i_minBar = sc.Input[0];
+	SCInputRef i_pivotLength = sc.Input[1];
+	
+	
+	
+	// Section 1 - Set the configuration variables and defaults
+	if (sc.SetDefaults)
+	{
+		sc.GraphName = "SUA FIND DT DB";
+
+		sc.AutoLoop = 0;  //Automatic looping is disabled. 
+		
+		sc.GraphRegion = 0;
+		
+		i_pivotLength.Name = "number of bar each side | ex. 4 is left 4 bars , right 4 bars";
+		i_pivotLength.SetInt(4);
+		
+		i_minBar.Name = "min number of bar";
+		i_minBar.SetInt(4);
+		
+		
+		
+		
+		
+		return;
+	}
+	
+	
+	// Section 2 - Do data processing here
+	
+	int MaxBarLookback = 0;
+	int MIN_START_INDEX = 2;   // need 3 so it is 0 1 2
+	
+	int minBar = i_minBar.GetInt();
+	int pivotLength = i_pivotLength.GetInt();
+	
+	auto detectPivotHighs = static_cast<std::vector<st_PivotHigh>*>(sc.GetPersistentPointer(1)); 
+	auto detectPivotLows = static_cast<std::vector<st_PivotHigh>*>(sc.GetPersistentPointer(2)); 
+	
+	
+	if (!detectPivotHighs) {
+        detectPivotHighs = new std::vector<st_PivotHigh>();
+        sc.SetPersistentPointer(1, detectPivotHighs);
+    }
+	
+	if (!detectPivotLows) {
+        detectPivotLows = new std::vector<st_PivotHigh>();
+        sc.SetPersistentPointer(2, detectPivotLows);
+    }
+	
+	if(pivotLength > MIN_START_INDEX)
+	{
+		MIN_START_INDEX = pivotLength*2 ;
+	}
+	
+	if (MaxBarLookback == 0 )
+		sc.DataStartIndex = MIN_START_INDEX; // Need at least three bars to calculate
+	else
+		sc.DataStartIndex = sc.ArraySize - 1 - MaxBarLookback + MIN_START_INDEX;
+	
+	
+	//A study will be fully calculated/recalculated when it is added to a chart, any time its Input settings are changed,
+	// another study is added or removed from a chart, when the Study Window is closed with OK or the settings are applied.
+	// Or under other conditions which can cause a full recalculation.
+	if (sc.IsFullRecalculation || sc.LastCallToFunction || sc.HideStudy)
+	{
+		
+		for (int i = 0; i < detectPivotHighs->size(); i++)
+		{
+			sc.DeleteUserDrawnACSDrawing(sc.ChartNumber, detectPivotHighs->at(i).lineNumber);
+		}
+		
+		// Drawings removed, now clear to avoid re-drawing them again
+		detectPivotHighs->clear();
+		
+		for (int i = 0; i < detectPivotLows->size(); i++)
+		{
+			sc.DeleteUserDrawnACSDrawing(sc.ChartNumber, detectPivotLows->at(i).lineNumber);
+		}
+		
+		// Drawings removed, now clear to avoid re-drawing them again
+		detectPivotHighs->clear();
+		
+		
+			
+		// Study is being removed nothing more to do
+		if (sc.LastCallToFunction || sc.HideStudy)
+			return;
+	}
+	
+	
+	// Clear out structure to avoid contually adding onto it and causing memory/performance issues
+	// TODO: Revist above logic. For now though we can't clear it until user type drawings are removed
+	// first so have to do it after that point
+	if (detectPivotHighs != NULL)
+		detectPivotHighs->clear();
+	
+	if (detectPivotLows != NULL)
+		detectPivotLows->clear();
+	
+	
+	 // 1.Loop through bars to DT  pattern
+    for ( int i = sc.DataStartIndex ; i < sc.ArraySize-1; ++i) 
+	{
+		
+		// Check if this is a new bar
+		/*if (sc.GetBarHasClosedStatus(i) == BHCS_BAR_HAS_NOT_CLOSED) {
+            continue;
+        }*/
+		
+		bool checkPivotHigh = iSPivotHigh(sc , i ,pivotLength );
+		bool checkPivotLow = iSPivotLow(sc , i ,pivotLength );
+		int ln = uniqueNumber+i ;
+		
+		// if found pivot high , then add it to vector
+		if(checkPivotHigh)
+		{						
+			// use emplace_back
+			detectPivotHighs->emplace_back(i ,ln );			
+			
+			// Ensure the vector does not exceed the maximum size
+			if (detectPivotHighs->size() > MAX_VECTOR_SIZE) {
+				detectPivotHighs->erase(detectPivotHighs->begin());
+			}
+		
+		}	
+		
+		// if found pivot low , then add it to vector
+		if(checkPivotLow)
+		{						
+			// use emplace_back
+			detectPivotLows->emplace_back(i ,ln );			
+			
+			// Ensure the vector does not exceed the maximum size
+			if (detectPivotLows->size() > MAX_VECTOR_SIZE) {
+				detectPivotLows->erase(detectPivotLows->begin());
+			}
+		
+		}	
+		
+	}	
+	
+	// for atr
+	int RefChartIndex =	sc.GetNearestMatchForDateTimeIndex(7, sc.ArraySize-1);   // (chart number of m5 , sc.Index)
+	SCFloatArray ATRArray;
+	sc.GetStudyArrayFromChartUsingID(7 , 6 , 0, ATRArray);
+	float atrValue = ATRArray[RefChartIndex];
+	
+	for(int i = 0 ; i < detectPivotHighs->size() ; i++)
+	{		
+		s_UseTool Tool;  
+		Tool.Clear(); // reset tool structure for our next use
+		Tool.ChartNumber = sc.ChartNumber;
+		Tool.DrawingType = DRAWING_TEXT;
+		Tool.LineNumber =  detectPivotHighs->at(i).lineNumber ;
+		Tool.BeginIndex = detectPivotHighs->at(i).index;
+		Tool.BeginValue = sc.High[detectPivotHighs->at(i).index] + 0.0003;
+		Tool.Color = RGB(255,255,0);  // Yellow
+		Tool.Text.Format("ATR Value: %f",atrValue );
+		//Tool.Text = "AHH";
+		Tool.FontSize = 16;
+		Tool.AddMethod = UTAM_ADD_OR_ADJUST;
+		
+		sc.UseTool(Tool);		
+	}
+	
+	for(int i = 0 ; i < detectPivotLows->size() ; i++)
+	{		
+		s_UseTool Tool;  
+		Tool.Clear(); // reset tool structure for our next use
+		Tool.ChartNumber = sc.ChartNumber;
+		Tool.DrawingType = DRAWING_TEXT;
+		Tool.LineNumber =  detectPivotLows->at(i).lineNumber ;
+		Tool.BeginIndex = detectPivotLows->at(i).index;
+		Tool.BeginValue = sc.Low[detectPivotLows->at(i).index] - 0.0003;
+		Tool.Color = RGB(255,255,0);  // Yellow
+		Tool.Text.Format("ATR Value: %f",atrValue );
+		//Tool.Text = "AHH";
+		Tool.FontSize = 16;
+		Tool.AddMethod = UTAM_ADD_OR_ADJUST;
+		
+		sc.UseTool(Tool);		
+	}
+
+	
+	
+	
+}
+
+// Function to find pivot highs
+bool iSPivotHigh(SCStudyInterfaceRef sc , int index, int pivotLength) 
+{
+	bool isPivotHigh = true;
+	
+	if(index + pivotLength >= sc.ArraySize-1 )
+	{
+		return false ;
+	}
+	
+	for (int i = 1; i <= pivotLength; i++) 
+	{        
+       if (sc.High[index] <= sc.High[index - i] || sc.High[index] <= sc.High[index + i]) {
+                isPivotHigh = false;
+                break;
+        }
+        
+    }
+    return isPivotHigh;
+}
+
+// Function to find pivot lows
+bool iSPivotLow(SCStudyInterfaceRef sc , int index, int pivotLength) 
+{
+	bool isPivotLow = true;
+	
+	if(index + pivotLength >= sc.ArraySize-1 )
+	{
+		return false ;
+	}
+	
+	for (int i = 1; i <= pivotLength; i++) 
+	{        
+       if (sc.Low[index] >= sc.Low[index - i] || sc.Low[index] >= sc.Low[index + i]) {
+                isPivotLow = false;
+                break;
+        }
+        
+    }
+    return isPivotLow;
+}
+
+
+
