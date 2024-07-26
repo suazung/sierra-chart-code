@@ -66,7 +66,8 @@ struct st_GoodSellOF {
 
 // Structure to represent an good sell OF start bar
 struct st_DoubleTopWithGoodOF {
-	int lineNumber;
+	int lineNumberOf3tzone;
+	int lineNumberOfGoodOf;
 	int indexOfPivotHigh;
 	int indexOfGoodOfStartBar;
 	int indexOfGoodOfEndBar;
@@ -74,10 +75,19 @@ struct st_DoubleTopWithGoodOF {
 	float highOfGoodOF;
 	float lowOfGoodOF;
    
-	st_DoubleTopWithGoodOF(int i1, int i2 , int i3 , int i4 ,
+	st_DoubleTopWithGoodOF(int i1, int i2 , int i3 , int i4 , int i5 ,
 	                       float f1 , float f2 , float f3) 
-						   : lineNumber(i1),indexOfPivotHigh(i2) ,indexOfGoodOfStartBar(i3) , indexOfGoodOfEndBar(i4) ,
+						   : lineNumberOf3tzone(i1), lineNumberOfGoodOf(i2), indexOfPivotHigh(i3) ,indexOfGoodOfStartBar(i4) , indexOfGoodOfEndBar(i5) ,
  						     highOfPivotHigh(f1) , highOfGoodOF(f2) , lowOfGoodOF(f3) {}
+};
+
+
+struct st_SimTrade {
+    int tradeNumber;
+	int indexOfPattern ;
+	int result ;
+   
+	st_SimTrade(int tnb , int iop , int rs) : tradeNumber(tnb) , indexOfPattern(iop) , result(rs)  {}
 };
 
 
@@ -93,6 +103,17 @@ void findGoodSellOrderFlow(SCStudyInterfaceRef sc,
                           std::vector<st_GoodSellOFStartBar>& detectedGoodSellStartBars , 
 						  std::vector<st_GoodSellOF>& detectGoodSellOF);
 						  
+float findMaxGoDownBeforeBreakHigh(SCStudyInterfaceRef sc ,int indexOfStartBar , int indexOfEndtBar) ;		
+
+void simTrade(SCStudyInterfaceRef sc , std::vector<st_DoubleTopWithGoodOF>& detectDTwithGoodSellOF , std::vector<st_SimTrade>& detectTrade , int tp_in_ticks) ;
+
+float meanVol( SCStudyInterfaceRef sc , int index , int lookback );
+
+float meanDelta( SCStudyInterfaceRef sc , int index , int lookback );
+
+
+
+				  
 						  
 
 //This is the basic framework of a study function. Change the name 'TemplateFunction' to what you require.
@@ -103,7 +124,7 @@ SCSFExport scsf_FindDtDb(SCStudyInterfaceRef sc)
 	
 	SCInputRef i_minBar = sc.Input[0];
 	SCInputRef i_pivotLength = sc.Input[1];
-	
+	SCInputRef i_tp_in_ticks = sc.Input[2];
 	
 	
 	
@@ -118,6 +139,9 @@ SCSFExport scsf_FindDtDb(SCStudyInterfaceRef sc)
 		
 		i_pivotLength.Name = "number of bar each side | ex. 4 is left 4 bars , right 4 bars";
 		i_pivotLength.SetInt(4);
+		
+		i_tp_in_ticks.Name = "TP in ticks";
+		i_tp_in_ticks.SetInt(40);
 		
 		i_minBar.Name = "min number of bar";
 		i_minBar.SetInt(4);
@@ -137,12 +161,16 @@ SCSFExport scsf_FindDtDb(SCStudyInterfaceRef sc)
 	
 	int minBar = i_minBar.GetInt();
 	int pivotLength = i_pivotLength.GetInt();
+	int tp_in_ticks = i_tp_in_ticks.GetInt();
 	
 	auto detectPivotHighs = static_cast<std::vector<st_PivotHigh>*>(sc.GetPersistentPointer(1)); 
 	auto detectPivotLows = static_cast<std::vector<st_PivotHigh>*>(sc.GetPersistentPointer(2)); 
 	auto detectedGoodSellStartBars = static_cast<std::vector<st_GoodSellOFStartBar>*>(sc.GetPersistentPointer(3));
 	auto detectGoodSellOF = static_cast<std::vector<st_GoodSellOF>*>(sc.GetPersistentPointer(4));
 	auto detectDTWithGoodOF = static_cast<std::vector<st_DoubleTopWithGoodOF>*>(sc.GetPersistentPointer(5));
+	auto sim1s = static_cast<std::vector<st_SimTrade>*>(sc.GetPersistentPointer(6));
+	auto fillterDTwithGoodSellOF = static_cast<std::vector<st_DoubleTopWithGoodOF>*>(sc.GetPersistentPointer(7));
+	
 	
 	if (!detectPivotHighs) {
         detectPivotHighs = new std::vector<st_PivotHigh>();
@@ -169,6 +197,17 @@ SCSFExport scsf_FindDtDb(SCStudyInterfaceRef sc)
         detectDTWithGoodOF = new std::vector<st_DoubleTopWithGoodOF>();
         sc.SetPersistentPointer(5, detectDTWithGoodOF);
     }
+	
+	if (!sim1s) {
+        sim1s = new std::vector<st_SimTrade>();
+        sc.SetPersistentPointer(6, sim1s);
+    }
+	
+	if (!fillterDTwithGoodSellOF) 
+	{
+		fillterDTwithGoodSellOF = new std::vector<st_DoubleTopWithGoodOF>();
+		sc.SetPersistentPointer(7, fillterDTwithGoodSellOF);
+	}	
 	
 	
 	
@@ -212,6 +251,15 @@ SCSFExport scsf_FindDtDb(SCStudyInterfaceRef sc)
 		
 		// Drawings removed, now clear to avoid re-drawing them again
 		detectGoodSellOF->clear();
+		
+		for (int i = 0; i < detectDTWithGoodOF->size(); i++)
+		{
+			sc.DeleteUserDrawnACSDrawing(sc.ChartNumber, detectDTWithGoodOF->at(i).lineNumberOf3tzone);
+			sc.DeleteUserDrawnACSDrawing(sc.ChartNumber, detectDTWithGoodOF->at(i).lineNumberOfGoodOf);
+		}
+		
+		// Drawings removed, now clear to avoid re-drawing them again
+		detectDTWithGoodOF->clear();
 				
 				
 			
@@ -241,6 +289,11 @@ SCSFExport scsf_FindDtDb(SCStudyInterfaceRef sc)
 	if (detectDTWithGoodOF != NULL)
 		detectDTWithGoodOF->clear();
 	
+	if (sim1s != NULL)
+		sim1s->clear();
+	
+	if (fillterDTwithGoodSellOF != NULL)
+		fillterDTwithGoodSellOF->clear();
 	
 	
 	 // 1.Loop through bars to DT  pattern
@@ -254,7 +307,7 @@ SCSFExport scsf_FindDtDb(SCStudyInterfaceRef sc)
 		
 		bool checkPivotHigh = iSPivotHigh(sc , i ,pivotLength );
 		bool checkPivotLow = iSPivotLow(sc , i ,pivotLength );
-		int ln = uniqueNumber+i ;
+		int ln = uniqueNumberForPivot+i ;
 		
 		// if found pivot high , then add it to vector
 		if(checkPivotHigh)
@@ -345,8 +398,9 @@ SCSFExport scsf_FindDtDb(SCStudyInterfaceRef sc)
 					}
 					if(noCandleBreakHigh)
 					{
-												 
-						int ln = uniqueNumberForPivotGoodSellOF + i;
+												
+						int ln1 = detectPivotHighs->at(j).lineNumber;
+						int ln2 = detectGoodSellOF->at(i).lineNumber;
 						int idxPivotHigh = indexOfPivotHigh ;
 						int idxStartBar = indexOfStartBar ;
 						int idxOFEndBar = detectGoodSellOF->at(i).endBarIndex;
@@ -354,7 +408,7 @@ SCSFExport scsf_FindDtDb(SCStudyInterfaceRef sc)
 						float hghOfGoodOF = sc.High[idxStartBar] ;
 						float lowOfGoodOF = sc.Low[idxOFEndBar] ;
 							 
-						detectDTWithGoodOF->emplace_back(ln ,idxPivotHigh , idxStartBar , idxOFEndBar , hghOfPivot , hghOfGoodOF , lowOfGoodOF);	
+						detectDTWithGoodOF->emplace_back(ln1 , ln2 ,idxPivotHigh , idxStartBar , idxOFEndBar , hghOfPivot , hghOfGoodOF , lowOfGoodOF);	
 					}
 						
 				}
@@ -362,39 +416,7 @@ SCSFExport scsf_FindDtDb(SCStudyInterfaceRef sc)
 			
 		}
 	}
-
-
 		
-		
-		//float howMuchMove = findMaxGoDownBeforeBreakHigh(sc,detectGoodSellOF->at(i).startBarIndex , detectGoodSellOF->at(i).endBarIndex) ;
-	    //int hmm = sc.PriceValueToTicks(howMuchMove) ;
-	
-		//if(hmm < 40)
-			//continue;
-		
-		// **************************** Draw GOOD Sell OF HERE *********************************************
-		/*s_UseTool rectangle;
-		rectangle.Clear();
-		rectangle.ChartNumber = sc.ChartNumber;
-		rectangle.DrawingType = DRAWING_RECTANGLEHIGHLIGHT;
-		rectangle.AddAsUserDrawnDrawing = 1;
-		rectangle.BeginIndex = detectGoodSellOF->at(i).startBarIndex;
-		rectangle.EndIndex = detectGoodSellOF->at(i).endBarIndex;
-		rectangle.BeginValue = sc.High[detectGoodSellOF->at(i).startBarIndex];
-		rectangle.EndValue = sc.Low[detectGoodSellOF->at(i).endBarIndex];
-		rectangle.Color = RGB(255, 0, 0);
-		rectangle.SecondaryColor = RGB(255, 165, 0);  // Orange color
-		rectangle.LineWidth = 1;
-		rectangle.TransparencyLevel = 90;
-		rectangle.AddMethod = UTAM_ADD_OR_ADJUST;
-		rectangle.LineNumber = detectGoodSellOF->at(i).lineNumber ;
-		rectangle.AllowCopyToOtherCharts = true;
-		sc.UseTool(rectangle);
-						
-		SCString msg;
-		msg.Format("start bar : %d | end bar : %d \n" , detectGoodSellOF->at(i).startBarIndex , detectGoodSellOF->at(i).endBarIndex );
-		sc.AddMessageToLog(msg,0);
-						*/
 	
 	
 	
@@ -404,7 +426,7 @@ SCSFExport scsf_FindDtDb(SCStudyInterfaceRef sc)
 	//sc.GetStudyArrayFromChartUsingID(7 , 6 , 0, ATRArray);
 	//float atrValue = ATRArray[RefChartIndex];
 	
-	for(int i = 0 ; i < detectPivotHighs->size() ; i++)
+/*	for(int i = 0 ; i < detectPivotHighs->size() ; i++)
 	{		
 		s_UseTool Tool;  
 		Tool.Clear(); // reset tool structure for our next use
@@ -421,7 +443,7 @@ SCSFExport scsf_FindDtDb(SCStudyInterfaceRef sc)
 		
 		sc.UseTool(Tool);		
 	}
-	
+*/	
 	for(int i = 0 ; i < detectPivotLows->size() ; i++)
 	{		
 		s_UseTool Tool;  
@@ -459,7 +481,25 @@ SCSFExport scsf_FindDtDb(SCStudyInterfaceRef sc)
 		rectangle.LineWidth = 1;
 		rectangle.TransparencyLevel = 75;
 		rectangle.AddMethod = UTAM_ADD_OR_ADJUST;
-		rectangle.LineNumber = detectDTWithGoodOF->at(i).lineNumber ;
+		rectangle.LineNumber = detectDTWithGoodOF->at(i).lineNumberOf3tzone ;
+		rectangle.AllowCopyToOtherCharts = true;
+		sc.UseTool(rectangle);
+		
+		// draw good sell OF
+		rectangle.Clear();
+		rectangle.ChartNumber = sc.ChartNumber;
+		rectangle.DrawingType = DRAWING_RECTANGLEHIGHLIGHT;
+		rectangle.AddAsUserDrawnDrawing = 1;
+		rectangle.BeginIndex = detectDTWithGoodOF->at(i).indexOfGoodOfStartBar;	
+		rectangle.EndIndex = detectDTWithGoodOF->at(i).indexOfGoodOfEndBar; 
+		rectangle.BeginValue = detectDTWithGoodOF->at(i).highOfGoodOF ;
+		rectangle.EndValue = detectDTWithGoodOF->at(i).lowOfGoodOF ;
+		rectangle.Color = RGB(255, 0, 0);
+		rectangle.SecondaryColor = RGB(255, 165, 0);  // Orange color
+		rectangle.LineWidth = 1;
+		rectangle.TransparencyLevel = 75;
+		rectangle.AddMethod = UTAM_ADD_OR_ADJUST;
+		rectangle.LineNumber = detectDTWithGoodOF->at(i).lineNumberOfGoodOf ;
 		rectangle.AllowCopyToOtherCharts = true;
 		sc.UseTool(rectangle);
 	}
@@ -493,113 +533,139 @@ SCSFExport scsf_FindDtDb(SCStudyInterfaceRef sc)
 			return;
 		}
 		
+		
+		
 		outputFile << "detect Double top with good OF  : " << "\n" ;
+		
 		for (int i = 0; i < detectDTWithGoodOF->size(); i++)
 		{
+			float hmm = findMaxGoDownBeforeBreakHigh( sc , detectDTWithGoodOF->at(i).indexOfGoodOfStartBar ,detectDTWithGoodOF->at(i).indexOfGoodOfEndBar  );
+			int howMuchMove = sc.PriceValueToTicks(hmm) ;
+			
+		
+			
+			SCFloatArray vol_per_sec;
+			sc.GetStudyArrayUsingID(3, 35, vol_per_sec);
+			float vpsOfEndBar = vol_per_sec[detectDTWithGoodOF->at(i).indexOfGoodOfEndBar] ;					
+			
+			int diff_idx_pivot_goodOF = detectDTWithGoodOF->at(i).indexOfGoodOfStartBar - detectDTWithGoodOF->at(i).indexOfPivotHigh ;
+			int diff_index_st_ed_GF_bar = detectDTWithGoodOF->at(i).indexOfGoodOfEndBar - detectDTWithGoodOF->at(i).indexOfGoodOfStartBar  ;
+			
+			SCDateTime t = sc.BaseDateTimeIn[detectDTWithGoodOF->at(i).indexOfGoodOfEndBar];
+			SCString date = sc.DateTimeToString( t, FLAG_DT_COMPLETE_DATETIME);
+			
+			// for mean 5 last 5 vol , if idx = 10 , i = 9,8,7,6,5
+			float mean5 = meanVol( sc , detectDTWithGoodOF->at(i).indexOfGoodOfEndBar, 20 ) ; 			//5
+			// for mean 5 last 10 vol , if idx = 10 , i = 4,3,2,1,0
+			float mean5_last_10 = meanVol( sc , detectDTWithGoodOF->at(i).indexOfGoodOfEndBar-20 , 20 ) ; //5,5
+		
 			outputFile << "i : " << i ; 
-			outputFile << " | pivot index : " << detectDTWithGoodOF->at(i).indexOfPivotHigh  ; 
-			outputFile << " | good OF index : " <<  detectDTWithGoodOF->at(i).indexOfGoodOfStartBar ;
-			outputFile << " | High OF : " << detectDTWithGoodOF->at(i).highOfGoodOF ;
-			outputFile << " | Low OF : " << detectDTWithGoodOF->at(i).lowOfGoodOF ;
+			outputFile << " | pv idx : " << detectDTWithGoodOF->at(i).indexOfPivotHigh  ; 
+			outputFile << " | gf idx : " <<  detectDTWithGoodOF->at(i).indexOfGoodOfStartBar ;
+			outputFile << " | diff idx PV GF : " << diff_idx_pivot_goodOF ;  
+			outputFile << " | diff idx st ed GF : " << diff_index_st_ed_GF_bar ;  
+			outputFile << " | VPS : " << vpsOfEndBar ;		
+			outputFile << " | mean 5 : " << mean5 ;
+			outputFile << " | mean 5 last 10 : " << mean5_last_10 ;
+			outputFile << " | Move : " << howMuchMove << "T" ;
+			outputFile << " | date : " << date ;	
 			outputFile << "\n";
 		}		
 		
+		// Close the file
+		outputFile.close();
 		
-/*		
-		outputFile <<  "\n\n" ;
-		outputFile << "detect Pivot High : " << "\n" ;
-		for (int i = 0; i < detectPivotHighs->size(); i++)
-		{
-			outputFile << "i : " << i ; 
-			outputFile << " | detect PH index : " << detectPivotHighs->at(i).index << "\n";		
 		
-		}
 		
-		outputFile <<  "\n\n" ;
-		outputFile << "detect Good Sell OrderFlow : " << "\n" ;
-		for (int i = 0; i < detectGoodSellOF->size(); i++)
-		{
-			outputFile << "i : " << i ; 
-			outputFile << " | st index : " << detectGoodSellOF->at(i).startBarIndex ;		
-			outputFile << " | ed index : " << detectGoodSellOF->at(i).endBarIndex << "\n";
-		}
-*/	
+//      ################################################                        ############################################
+//      ################################################ Get pattern and filter ############################################
+//      ################################################                        ############################################
 
-/*		for (int i = 0; i < detectGoodSellOF->size(); i++)
-		{
-			
-			SCString date = sc.DateTimeToString( detectGoodSellOF->at(i).time_of_end_bar, FLAG_DT_COMPLETE_DATETIME);
-			float howMuchMove = findMaxGoDownBeforeBreakHigh(sc,detectGoodSellOF->at(i).startBarIndex , detectGoodSellOF->at(i).endBarIndex) ;
-			int hmm = sc.PriceValueToTicks(howMuchMove) ;
 
+		// Get the study ID3 and SG1 (=0)    | it is delta
+		SCFloatArray delta;
+		sc.GetStudyArrayUsingID(3, 0, delta);
+		
+		// it is cum delta low of start bar
+		SCFloatArray cum_delta_low;
+		sc.GetStudyArrayUsingID(3, 21, cum_delta_low);
+		
+		// it is totl vol
+		SCFloatArray vol;
+		sc.GetStudyArrayUsingID(3, 12, vol);
+		
+		// it is vol/sec
+		SCFloatArray vol_per_sec;
+		sc.GetStudyArrayUsingID(3, 35, vol_per_sec);
+		
+		// it is cvd
+		SCFloatArray cum_vol_day;
+		sc.GetStudyArrayUsingID(3, 39, cum_vol_day);
+		
+		// it is min_delta
+		SCFloatArray min_delta;
+		sc.GetStudyArrayUsingID(3, 8, min_delta);
+		
+		// it is min_delta
+		SCFloatArray max_delta;
+		sc.GetStudyArrayUsingID(3, 7, max_delta);
+		
+		// it is totl vwap
+		SCFloatArray vwap;
+		sc.GetStudyArrayUsingID(10, 0, vwap);		
+
+		// for atr
+		SCFloatArray ATRArray;
+		sc.GetStudyArrayFromChartUsingID(7 , 6 , 0, ATRArray);
+				
+		// for ema200
+		SCFloatArray EMAArray;
+		sc.GetStudyArrayFromChartUsingID(7 , 1 , 0, EMAArray);
+		
+		
+		
+		
+					
+		for (int i = 0; i < detectDTWithGoodOF->size(); i++)
+		{
+			// for get index on m5 chart
+			int RefChartIndex =	sc.GetNearestMatchForDateTimeIndex(7, detectDTWithGoodOF->at(i).indexOfGoodOfEndBar);   // (chart number of m5 , sc.Index)
 			
-			// Get the study ID3 and SG1 (=0)    | it is delta
-			SCFloatArray delta;
-			sc.GetStudyArrayUsingID(3, 0, delta);
+			SCDateTime t1 = sc.BaseDateTimeIn[detectDTWithGoodOF->at(i).indexOfGoodOfEndBar];
+			SCString date = sc.DateTimeToString( t1 , FLAG_DT_COMPLETE_DATETIME);
 			
-			// it is cum delta low of start bar
-			SCFloatArray cum_delta_low;
-			sc.GetStudyArrayUsingID(3, 21, cum_delta_low);
+			float hmm = findMaxGoDownBeforeBreakHigh( sc , detectDTWithGoodOF->at(i).indexOfGoodOfStartBar ,detectDTWithGoodOF->at(i).indexOfGoodOfEndBar  );
+			int howMuchMove = sc.PriceValueToTicks(hmm) ;
 			
-			// it is totl vol
-			SCFloatArray vol;
-			sc.GetStudyArrayUsingID(3, 12, vol);
-			
-			// it is vol/sec
-			SCFloatArray vol_per_sec;
-			sc.GetStudyArrayUsingID(3, 35, vol_per_sec);
-			
-			// it is cvd
-			SCFloatArray cum_vol_day;
-			sc.GetStudyArrayUsingID(3, 39, cum_vol_day);
-			
-			// it is min_delta
-			SCFloatArray min_delta;
-			sc.GetStudyArrayUsingID(3, 8, min_delta);
-			
-			// it is min_delta
-			SCFloatArray max_delta;
-			sc.GetStudyArrayUsingID(3, 7, max_delta);
-			
-			// it is totl vwap
-			SCFloatArray vwap;
-			sc.GetStudyArrayUsingID(10, 0, vwap);
-			
-			
-			
+			int diff_pv_gf_idx = detectDTWithGoodOF->at(i).indexOfGoodOfStartBar  - detectDTWithGoodOF->at(i).indexOfPivotHigh  ;
+
 			// for atr
-			int RefChartIndex =	sc.GetNearestMatchForDateTimeIndex(7, detectGoodSellOF->at(i).endBarIndex);   // (chart number of m5 , sc.Index)
-			SCFloatArray ATRArray;
-			sc.GetStudyArrayFromChartUsingID(7 , 6 , 0, ATRArray);
 			float atrValue = ATRArray[RefChartIndex];
 			
 			// for ema200
-			SCFloatArray EMAArray;
-			sc.GetStudyArrayFromChartUsingID(7 , 1 , 0, EMAArray);
 			float emaValue = EMAArray[RefChartIndex];
-		    
-			// for mean vol
-			float mean5 = meanVol( sc , detectGoodSellOF->at(i).endBarIndex, 5 ) ; //5
+		
+			// for mean 5 last 5 vol , if idx = 10 , i = 9,8,7,6,5
+			float mean20 = meanVol( sc , detectDTWithGoodOF->at(i).indexOfGoodOfEndBar, 20 ) ; //5
 			
+			// for mean 5 last 10 vol , if idx = 10 , i = 4,3,2,1,0
+			float mean20_last_20 = meanVol( sc , detectDTWithGoodOF->at(i).indexOfGoodOfEndBar-20 , 20 ) ; //5
+		
 			// for mean delata
-			float meanDelta5 = meanDelta(  sc , detectGoodSellOF->at(i).endBarIndex, 5 ) ;    //5,10
-			
-			// for mean min delta
-			float meanMinDelta10 = meanMinDelta( sc , detectGoodSellOF->at(i).endBarIndex, 10  );
-			
-			// for mean max delta
-			float meanMaxDelta10 = meanMaxDelta( sc , detectGoodSellOF->at(i).endBarIndex, 10 ) ;
-			
+			float meanDelta5 = meanDelta(  sc , detectDTWithGoodOF->at(i).indexOfGoodOfEndBar, 5 ) ;    //5,10
+	
 		
 		
-		
-		
-			// ################################################ Start filter Good Buy OF Here  ############################################
+			// ################################################ Start filter DT and Good Sell OF Here  ############################################
 			
-		    //if(hmm < 40) 	continue;			
-			//if(detectGoodSellOF->at(i).time_of_end_bar.GetHour() > 18) continue;	
-			//if(detectGoodSellOF->at(i).endBarIndex - detectGoodSellOF->at(i).startBarIndex < 80 ) continue;		
-			//if(detectGoodSellOF->at(i).endBarIndex - detectGoodSellOF->at(i).startBarIndex > 450 ) continue;
+		    //if(howMuchMove < 40) 	continue;		
+			//if(t1.GetHour() < 7) continue;		
+			//if(t1.GetHour() > 18) continue;	
+			if(diff_pv_gf_idx < 3) continue;	
+			if(diff_pv_gf_idx > 40) continue;	
+			if(mean20 > mean20_last_20) continue;	
+		    //if(detectGoodSellOF->at(i).endBarIndex - detectGoodSellOF->at(i).startBarIndex < 80 ) continue;		
+		 	//if(detectGoodSellOF->at(i).endBarIndex - detectGoodSellOF->at(i).startBarIndex > 450 ) continue;
 			//if( vol[detectGoodSellOF->at(i).endBarIndex] < 1000 ) continue;				
 			//if( vol[detectGoodSellOF->at(i).endBarIndex] < mean5/2 ) continue;	
 			//if( vol[detectGoodSellOF->at(i).endBarIndex] < mean5*1 ) continue;	
@@ -607,12 +673,12 @@ SCSFExport scsf_FindDtDb(SCStudyInterfaceRef sc)
 			//if(meanMinDelta10 > -30 ) continue;			
 			//if(meanMaxDelta10 > 100 ) //continue;					
 			//if(sc.PriceValueToTicks(atrValue) > 1)  continue;			
-			//if(vol_per_sec[detectGoodSellOF->at(i).endBarIndex] > 3)  continue;			//1.4
+			if(vol_per_sec[detectDTWithGoodOF->at(i).indexOfGoodOfEndBar] > 10)  continue;			//1.4
 			//if(detectGoodSellOF->at(i).endBarIndex - detectGoodSellOF->at(i).startBarIndex >= 3 && vol[detectGoodSellOF->at(i).endBarIndex] <= 1000) //continue;			
 			//if(sc.PriceValueToTicks( vwap[detectGoodSellOF->at(i).endBarIndex]-sc.Close[detectGoodSellOF->at(i).endBarIndex] ) <= -3)  continue;			
 			//if(sc.PriceValueToTicks( vwap[detectGoodSellOF->at(i).endBarIndex]-sc.Close[detectGoodSellOF->at(i).endBarIndex] ) >= 3)  continue;
 			//if(cum_vol_day[detectGoodSellOF->at(i).endBarIndex] > 20000)  continue;
-			int startIdx = detectGoodSellOF->at(i).startBarIndex ;
+	/*		int startIdx = detectGoodSellOF->at(i).startBarIndex ;
 			int endIdx = detectGoodSellOF->at(i).endBarIndex ;
 			int idxOfGoodSellOF = i ;
 			bool haveStartBarIsSameAsBefore = false;
@@ -643,74 +709,35 @@ SCSFExport scsf_FindDtDb(SCStudyInterfaceRef sc)
 				}
 			}
 			//if(sumOFTouchHighOfStartIndex > 5 )  continue;  //3
+	*/		
+			// ########################################### End filter DT with Good Sell OF Here  ############################################
 			
-			// ########################################### End filter Good Buy OF Here  ############################################
 			
+			// ######################## Add data to fillterDTwithGoodSellOF Object 
+			int i1 = detectDTWithGoodOF->at(i).lineNumberOf3tzone;
+			int i2 = detectDTWithGoodOF->at(i).lineNumberOfGoodOf;
+			int i3 = detectDTWithGoodOF->at(i).indexOfPivotHigh;
+			int i4 = detectDTWithGoodOF->at(i).indexOfGoodOfStartBar;
+			int i5 = detectDTWithGoodOF->at(i).indexOfGoodOfEndBar;
+			float f1 = detectDTWithGoodOF->at(i).highOfPivotHigh;
+			float f2 = detectDTWithGoodOF->at(i).highOfGoodOF;
+			float f3 = detectDTWithGoodOF->at(i).lowOfGoodOF;
 			
-			
+			fillterDTwithGoodSellOF->emplace_back(i1,i2,i3,i4,i5,f1,f2,f3);	
 			
 	
-	        // ######################## Add data to fillterGoodBuyOF Object 
-			int idx1 = detectGoodSellOF->at(i).startBarIndex;
-			int v1 = detectGoodSellOF->at(i).volume_of_start_bar;
-			int d1 = detectGoodSellOF->at(i).delta_of_start_bar;
-			SCDateTime t1 = detectGoodSellOF->at(i).time_of_start_bar;			
-			int idx2 = detectGoodSellOF->at(i).endBarIndex ;
-			int v2 = detectGoodSellOF->at(i).volume_of_end_bar;
-			int d2 = detectGoodSellOF->at(i).delta_of_end_bar;
-			SCDateTime t2 = detectGoodSellOF->at(i).time_of_end_bar;	
-			int ln = detectGoodSellOF->at(i).lineNumber ;						
-			fillterGoodSellOF->emplace_back(idx1, v1, d1 , t1 ,idx2 ,v2 , d2 , t2 , ln );
-			
+	       			
+		
 			
 		
-			// Write the data to the file
-			outputFile << "Trade: " << i+1 ;
-			outputFile << ", si: " << detectGoodSellOF->at(i).startBarIndex ;
-			outputFile << " , ei: " << detectGoodSellOF->at(i).endBarIndex ;
-			outputFile << " , diff idx: " << detectGoodSellOF->at(i).endBarIndex - detectGoodSellOF->at(i).startBarIndex ;
-			//outputFile << " , vwap: " << sc.PriceValueToTicks( vwap[detectGoodBuyOF->at(i).endBarIndex]-sc.Close[detectGoodBuyOF->at(i).endBarIndex] )  ;
-			outputFile << " , vol: " << vol[detectGoodSellOF->at(i).endBarIndex] ;
-			outputFile << " , mean 5 : " << mean5  ;
-			outputFile << " , vol/sec: " << vol_per_sec[detectGoodSellOF->at(i).endBarIndex] ;
-			//outputFile << " , cvd: " << cum_vol_day[detectGoodBuyOF->at(i).endBarIndex] ;meanDelta3
-			outputFile << " , mean delta 5: " << meanDelta5;
-			outputFile << " , delta: " << delta[detectGoodSellOF->at(i).endBarIndex] ;  
-			//outputFile << " , cumdelta1: " << cum_delta_low[detectGoodBuyOF->at(i).startBarIndex] ;
-			//outputFile << " , cumdelta2: " << cum_delta_low[detectGoodBuyOF->at(i).endBarIndex] ;
-			//outputFile << " , min delta: " << min_delta[detectGoodBuyOF->at(i).endBarIndex] ;
-			//outputFile << " , max delta: " << max_delta[detectGoodBuyOF->at(i).endBarIndex] ;
-			outputFile << " , atr: " << sc.PriceValueToTicks(atrValue)  ;
-			outputFile << " , ema200: " << sc.PriceValueToTicks(sc.Close[detectGoodSellOF->at(i).endBarIndex] - emaValue)  ;
-			//outputFile << " , mean min delta 10 : " << meanMinDelta10  ;
-			//outputFile << " , mean max delta 10 : " << meanMaxDelta10  ;
-			//outputFile << " , max price move: " << std::setprecision(4) << hmm ;
-			outputFile << " , time : " << date << "\n";
-			
 		}
-		
-		//outputFile << " \ntotal trade : " <<  detectGoodBuyOF->size() << "\n" ;
-		//outputFile << sc.TickSize;
-		outputFile << sc.PriceValueToTicks(sc.High[sc.ArraySize-1] ) ;
-		outputFile << "\nSL: 12 for all trade , Trade Direction is Long only , dont look at si ,ei for analsis\n"  ;	
-		outputFile << "if max price move less than 12 mean loss"  ;		
-		//outputFile << "I want to know which delta,TP,time range to get best profit"  ;	
-		outputFile << "\nsim all trade , which tp level to get best profit , for example , if max price move:20 then you check each trade if max price move < 20 mean loss , if max price move >= 20 mean win\n"  ;	
-		outputFile << "and sim total profit lost each tp level"  ;
-		//outputFile << "can you fillter trade by delta range,vol range,atr range, diff between si and ei range to get better win rate"  ;	
-		
-		//can you fillter trade by delta , diff between si and ei range to get better win rate
-
-*/
-				 
-		// Close the file
-		outputFile.close();
-		
+	
+	
 		
 		
 		
 		// ################################## SIM ###############################################
-		//simTrade( sc , *fillterGoodSellOF , *sim1s) ;
+		simTrade( sc , *fillterDTwithGoodSellOF , *sim1s , tp_in_ticks) ;
 		// ################################## SIM ###############################################
 		
 		
@@ -1061,4 +1088,213 @@ void findGoodSellOrderFlow(SCStudyInterfaceRef sc , std::vector<st_GoodSellOFSta
     }
 }
 
+float findMaxGoDownBeforeBreakHigh(SCStudyInterfaceRef sc ,int indexOfStartBar , int indexOfEndtBar) 
+{
+	//float low = sc.Low[indexOfStartBar] - 0.0001 ;     // SL at low
+	//float low = sc.High[indexOfEndtBar] - 0.0005 ;
+    //int high = 	sc.PriceValueToTicks(sc.Low[indexOfEndtBar]) + 5 ;// SL at 
+	int high = 	sc.PriceValueToTicks(sc.High[indexOfStartBar]) + 1 ;// SL at 
+	
+	int indexThatBreakHigh = -1;
+	
+	// find which index break high
+	for(int i = indexOfEndtBar ; i < sc.ArraySize-1 ; i++)
+	{
+		if( sc.PriceValueToTicks(sc.High[i]) >= high )
+		{
+			indexThatBreakHigh = i;
+			break;
+		}
+	}
+	
+	if(indexThatBreakHigh == -1)
+	{
+		indexThatBreakHigh = sc.ArraySize-1;
+	}
+	
+	float maxPriceGo = 100;
+	
+	for(int i = indexOfEndtBar ; i <= indexThatBreakHigh ; i++)
+	{
+		if(sc.Low[i] < maxPriceGo)
+		{
+			maxPriceGo = sc.Low[i] ;
+		}
+	}
+	
+	return sc.Low[indexOfEndtBar]-maxPriceGo  ;
+	
+}
 
+
+
+
+void simTrade(SCStudyInterfaceRef sc , std::vector<st_DoubleTopWithGoodOF>& detectDTwithGoodSellOF , std::vector<st_SimTrade>& detectTrade , int tp_in_ticks) 
+{
+	int tradeNumber = 0 ;
+	float tp  ;
+	
+	
+	detectTrade.clear() ;
+	
+	
+
+	
+		
+	// loop in good Sell OF
+	for (int i = 0; i < detectDTwithGoodSellOF.size(); i++)
+	{
+		int sellIndex = i;
+		
+		int entryIndex = detectDTwithGoodSellOF[i].indexOfGoodOfEndBar ;
+		float entryPrice = detectDTwithGoodSellOF[i].lowOfGoodOF ;
+		float stopLoss = detectDTwithGoodSellOF[i].highOfGoodOF + sc.TickSize ;
+		tp = entryPrice - tp_in_ticks*sc.TickSize  ;
+		
+		int indexOfPattern ;
+		int result ;
+		
+		// loop from entry bar to end
+		for(int j = entryIndex+1 ; j < sc.ArraySize-1; j++)
+		{
+			// if break low win
+			if(sc.Low[j] <= tp)
+			{
+				// win
+				tradeNumber++;
+				indexOfPattern = sellIndex;
+				result = tp_in_ticks ;
+				
+				detectTrade.emplace_back(tradeNumber, indexOfPattern , result );
+			    
+				break;				
+												
+				
+			}// if breaK High loss
+			else if( sc.High[j] >= stopLoss)
+			{
+				// loss
+				tradeNumber++;
+				indexOfPattern = sellIndex;
+				result = sc.PriceValueToTicks(entryPrice-stopLoss) ;
+				
+				detectTrade.emplace_back(tradeNumber, indexOfPattern , result );
+				break;		
+			}
+		}
+		
+		
+	}
+	
+	
+	
+	
+	SCString filePath = sc.DataFilesFolder() + "Sim DT with good OF Trades.txt";   		
+
+	// Open the file in append mode
+	std::ofstream outputFile;
+	if (sc.Index == 0)
+	{
+		// If it's the first bar, overwrite the file
+		outputFile.open(filePath.GetChars(), std::ios::out);
+	}
+	
+	// Check if the file opened successfully
+	if (!outputFile.is_open())
+	{
+		SCString error;
+		error.Format("Failed to open file: %s", filePath.GetChars());
+		sc.AddMessageToLog(error, 1);
+		return;
+	}
+
+    int totalProfit = 0 ;
+	int numberWin = 0;
+	int numberLoss = 0;
+	
+	for(int i = 0 ; i < detectTrade.size() ; i++)
+	{
+		int idx = detectTrade[i].indexOfPattern ;
+		int pivotIndex = detectDTwithGoodSellOF[idx].indexOfPivotHigh ;
+		int startIndex = detectDTwithGoodSellOF[idx].indexOfGoodOfStartBar ;
+		int endIndex =  detectDTwithGoodSellOF[idx].indexOfGoodOfEndBar ;
+		int rs = detectTrade[i].result ;
+		
+		float hmm = findMaxGoDownBeforeBreakHigh( sc , startIndex ,endIndex  );
+		int howMuchMove = sc.PriceValueToTicks(hmm) ;
+		
+		
+		float mean20 = meanVol( sc , endIndex, 20 ) ; 			//5		
+		float mean20_last_20 = meanVol( sc , endIndex-20 , 20 ) ; //5,5
+		
+		// it is vol/sec
+		SCFloatArray vol_per_sec;
+		sc.GetStudyArrayUsingID(3, 35, vol_per_sec);
+		float vps = vol_per_sec[endIndex] ; 
+		
+		SCDateTime t1 = sc.BaseDateTimeIn[detectDTwithGoodSellOF[i].indexOfGoodOfEndBar];
+		SCString date = sc.DateTimeToString( t1 , FLAG_DT_COMPLETE_DATETIME);
+		
+		outputFile << "Trade: " << detectTrade[i].tradeNumber ;
+		outputFile << ", pivot index : " << pivotIndex ;
+		outputFile << ", start index : " << startIndex ;
+		outputFile << ", end index : " << endIndex ;
+		outputFile << ", vps : " << vps ;
+		outputFile << ", mean20 : " << mean20 ;
+		outputFile << ", mean 20 last 20 : " << mean20_last_20 ;
+		outputFile << " , result: " << rs ;
+		outputFile << " , best move : " << howMuchMove << "T" ;
+		outputFile << " , date: " << date ;
+		outputFile << " \n"  ;
+		
+		totalProfit += rs;
+		
+		if(rs > 0)
+		{
+			numberWin++;
+		}
+		else
+		{
+			numberLoss++;
+		}
+		
+	}
+	
+	outputFile << detectTrade.size() << " \n"  ;
+	//outputFile << "Tp: " << 1 + 40*sc.TickSize ; 
+	//outputFile << " , Sl: " << 1.2 - 5*sc.TickSize ;
+	outputFile << "number Win: " << numberWin << "\n" ;
+	outputFile << "number Loss: " << numberLoss << "\n" ;
+	outputFile << "Total profit: " << totalProfit << "\n" ;
+	
+    
+	// Close the file
+	outputFile.close();	
+	
+}
+
+float meanVol( SCStudyInterfaceRef sc , int index , int lookback )
+{
+	SCFloatArray vol;
+	sc.GetStudyArrayUsingID(3, 12, vol);	
+	float sum=0;
+	
+	for(int i = index-1 ; i >= index - lookback ; i-- )
+	{
+		sum += vol[i];
+	}
+	return sum/lookback ;
+}
+
+float meanDelta( SCStudyInterfaceRef sc , int index , int lookback )
+{
+	SCFloatArray delta;
+	sc.GetStudyArrayUsingID(3, 0, delta);	
+	float sum=0;
+	
+	for(int i = index-1 ; i >= index - lookback ; i-- )
+	{
+		sum += abs( delta[i] );
+	}
+	return sum/lookback ;
+}
