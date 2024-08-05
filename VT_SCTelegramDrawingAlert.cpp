@@ -1,3 +1,12 @@
+// need to add these dll files to C:\SierraChart\Data too
+// VT_SCTelegramDrawingAlert.dll 
+// zlib.dll 
+// libcrypto-3-x64.dll 
+// libcurl.dll 
+// libssh2.dll 
+// libssl-3-x64.dll
+
+
 #include <boost/format.hpp>
 #include <curl/curl.h>
 #include <filesystem>
@@ -759,12 +768,26 @@ void CURLTelegramPostRequest(const SCString& URL, const std::string& ChatID, con
 		// Set the URL
 		curl_easy_setopt(curl, CURLOPT_URL, URL.GetChars());
 
+
+		// *********************** Enable verbose logging for debugging *******************
+		// **********************                                        *****************
+		curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
+
+
 		// Debug  
 		// Set the write function
 		curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
 
 		// Pass a pointer to string variable to store the response
 		curl_easy_setopt(curl, CURLOPT_WRITEDATA, &responseStream);
+
+
+
+		// *********************** Set CA certificate path *******************
+		// **********************                          *****************
+
+		curl_easy_setopt(curl, CURLOPT_CAINFO, "C:/curl/certs/cacert-2024-07-02.pem");
+
 
 		// Perform the HTTP POST request
 		CURLcode res = curl_easy_perform(curl);
