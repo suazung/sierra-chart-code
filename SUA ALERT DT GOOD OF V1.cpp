@@ -274,10 +274,15 @@ SCSFExport scsf_AlertDTWithGoodOF(SCStudyInterfaceRef sc)
 			
 		}					
 		
-		//##############################                   ##############################################
-		//############################## FIND GOOD SELL Start Bar ##############################################
-		//##############################                   ##############################################
-		
+			
+	}	
+	
+	
+	//  2. FIND GOOD SELL Start Bar 
+	bool lastBarIsGoodSellStartBar = false;
+	for ( int i = sc.DataStartIndex ; i < sc.ArraySize-1; ++i) 
+	{	
+				
 		bool isItStartBarOFGoodSellOrderflow = checkValidBar(sc , i ,CHECK_5LEVEL_AND_POCATTOP);
 		
 		
@@ -294,15 +299,30 @@ SCSFExport scsf_AlertDTWithGoodOF(SCStudyInterfaceRef sc)
 				detectedGoodSellStartBars->erase(detectedGoodSellStartBars->begin());
 			}		
 			
+			
+			sc.Subgraph[0][i] = 1;
+			
 			if(i == sc.ArraySize-1-1 )
 			{
 				// Trigger the alert
-				sc.SetAlert(AlertSound.GetAlertSoundNumber()-1 , "good 7 sell start bar" );
-				break;
+				
+				lastBarIsGoodSellStartBar = true;
+				//break;
 			}
 
-		}			
-	}	
+		}		
+		else
+		{
+			sc.Subgraph[0][i] = 0;
+		}
+	}
+	
+	int currentIndex = sc.UpdateStartIndex ;
+	
+	if(currentIndex >= sc.DataStartIndex && sc.Subgraph[0][currentIndex-1] == 1)
+		sc.SetAlert(AlertSound.GetAlertSoundNumber()-1 , "good 8 sell start bar" );
+	
+	
 	
 	 // 2. find end bar of good sell OF
 	findGoodSellOrderFlow(sc , *detectedGoodSellStartBars , *detectGoodSellOF);
