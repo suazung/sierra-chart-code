@@ -1,4 +1,7 @@
 
+// need put these dlls in C:\SierraChart\Data
+
+
 
 
 
@@ -116,15 +119,17 @@ SCSFExport scsf_AlertDTWithGoodOF(SCStudyInterfaceRef sc)
 
 		sc.AutoLoop = 0;  //Automatic looping is disabled. 
 		
-		sc.GraphRegion = 0;
+		sc.GraphRegion = 3;
 		
 		sc.Subgraph[0].Name = "SELL SIGNAL";
+		sc.Subgraph[0].DrawStyle = DRAWSTYLE_BAR;
+        sc.Subgraph[0].LineWidth = 7;
 		
 		i_pivotLength.Name = "number of bar each side | ex. 4 is left 4 bars , right 4 bars";
-		i_pivotLength.SetInt(4);
+		i_pivotLength.SetInt(2);
 		
 		i_tp_in_ticks.Name = "TP in ticks";
-		i_tp_in_ticks.SetInt(40);
+		i_tp_in_ticks.SetInt(12);
 		
 	
 		
