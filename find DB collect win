@@ -1,0 +1,27 @@
+Trade: 1, pivot index : 204, start index : 207, end index : 208, vps : 1.31017 , vwap: 13, div mean : 0.769076 , result: 12 , best move : 419T , date: 2024-07-02  08:49:01 
+Trade: 2, pivot index : 262, start index : 282, end index : 284, vps : 1.44737 , vwap: -23, div mean : 1.58157 , result: 12 , best move : 372T , date: 2024-07-02  15:19:32 
+Trade: 3, pivot index : 669, start index : 681, end index : 682, vps : 1.71245 , vwap: -11, div mean : 0.782837 , result: 12 , best move : 43T , date: 2024-07-05  18:00:43 
+Trade: 4, pivot index : 731, start index : 734, end index : 737, vps : 0.893617 , vwap: -7, div mean : 0.800598 , result: 12 , best move : 24T , date: 2024-07-08  12:07:13 
+Trade: 5, pivot index : 844, start index : 848, end index : 856, vps : 0.599065 , vwap: -1, div mean : 1.29434 , result: 12 , best move : 255T , date: 2024-07-09  19:39:13 
+Trade: 6, pivot index : 892, start index : 895, end index : 904, vps : 16.1493 , vwap: -13, div mean : 1.10308 , result: 12 , best move : 230T , date: 2024-07-10  14:30:09 
+Trade: 7, pivot index : 1105, start index : 1108, end index : 1116, vps : 138 , vwap: -36, div mean : 2.15385 , result: 12 , best move : 142T , date: 2024-07-11  13:30:04 
+Trade: 8, pivot index : 1276, start index : 1298, end index : 1299, vps : 0.244733 , vwap: 2, div mean : 1.88994 , result: 12 , best move : 134T , date: 2024-07-12  04:27:37 
+Trade: 9, pivot index : 1669, start index : 1672, end index : 1675, vps : 0.486512 , vwap: 0, div mean : 0.73112 , result: 12 , best move : 86T , date: 2024-07-16  18:15:00 
+Trade: 10, pivot index : 2096, start index : 2102, end index : 2107, vps : 1.28372 , vwap: -7, div mean : 0.619558 , result: 12 , best move : 12T , date: 2024-07-22  09:53:11 
+Trade: 11, pivot index : 2313, start index : 2316, end index : 2317, vps : 0.502275 , vwap: -11, div mean : 1.55658 , result: 12 , best move : 30T , date: 2024-07-24  12:10:45 
+Trade: 12, pivot index : 2494, start index : 2497, end index : 2511, vps : 1.62162 , vwap: 16, div mean : 0.423497 , result: 12 , best move : 22T , date: 2024-07-25  14:30:06 
+Trade: 13, pivot index : 2675, start index : 2679, end index : 2680, vps : 0.123608 , vwap: -3, div mean : 0.602301 , result: 12 , best move : 16T , date: 2024-07-29  01:07:27 
+Trade: 14, pivot index : 2754, start index : 2757, end index : 2762, vps : 3.12832 , vwap: -4, div mean : 1.04195 , result: 12 , best move : 13T , date: 2024-07-29  14:15:25 
+Trade: 15, pivot index : 2880, start index : 2884, end index : 2889, vps : 1.10762 , vwap: 12, div mean : 0.588316 , result: 12 , best move : 19T , date: 2024-07-30  17:15:01 
+Trade: 16, pivot index : 2902, start index : 2908, end index : 2909, vps : 0.226225 , vwap: -5, div mean : 0.254112 , result: 12 , best move : 12T , date: 2024-07-31  01:22:37 
+Trade: 17, pivot index : 3509, start index : 3512, end index : 3517, vps : 2.90435 , vwap: 12, div mean : 0.822473 , result: 12 , best move : 123T , date: 2024-08-02  09:00:40 
+Trade: 18, pivot index : 3798, start index : 3813, end index : 3815, vps : 1.22881 , vwap: 4, div mean : 1.21612 , result: 12 , best move : 21T , date: 2024-08-05  02:15:33 
+Trade: 19, pivot index : 4225, start index : 4229, end index : 4240, vps : 1.40476 , vwap: -18, div mean : 1.81081 , result: 12 , best move : 15T , date: 2024-08-05  14:28:47 
+Trade: 20, pivot index : 4731, start index : 4734, end index : 4739, vps : 1.9625 , vwap: 49, div mean : 1.03285 , result: 12 , best move : 51T , date: 2024-08-06  14:01:39 
+Trade: 21, pivot index : 4817, start index : 4835, end index : 4836, vps : 0.610753 , vwap: 1, div mean : 0.323989 , result: 12 , best move : 15T , date: 2024-08-06  18:49:46 
+Trade: 22, pivot index : 4969, start index : 4972, end index : 4973, vps : 0.839674 , vwap: -7, div mean : 0.599815 , result: 12 , best move : 26T , date: 2024-08-07  11:23:36 
+Trade: 23, pivot index : 5263, start index : 5270, end index : 5276, vps : 1.70625 , vwap: -26, div mean : 1.12873 , result: 12 , best move : 27T , date: 2024-08-08  15:42:38 
+23 
+number Win: 23
+number Loss: 0
+Total profit: 276
