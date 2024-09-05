@@ -107,26 +107,42 @@ if __name__ == "__main__":
 
 
 
-#property strict
-
-input string url = "http://127.0.0.1:8000/webhook";  // FastAPI server URL to get the price
-
 //+------------------------------------------------------------------+
-//| Script program start function                                    |
+//| Expert initialization function                                   |
 //+------------------------------------------------------------------+
-void OnStart()
+int OnInit()
 {
-   string cookie = NULL;       // No cookies
-   string referer = NULL;      // No referer
-   int timeout = 5000;         // Timeout for the request in milliseconds (5 seconds)
-   
-   char postData[];            // Empty postData for GET request
-   int data_size = 0;          // No data for GET request
-   
-   char result[];              // Array to store the server's response
-   string result_headers;      // String to store the response headers
+   // Print initialization message
+   Print("Expert initialized. Waiting for ticks...");
+   return(INIT_SUCCEEDED);
+}
 
-   // Make the HTTP GET request
+//+------------------------------------------------------------------+
+//| Expert deinitialization function                                 |
+//+------------------------------------------------------------------+
+void OnDeinit(const int reason)
+{
+   Print("Expert deinitialized.");
+}
+
+//+------------------------------------------------------------------+
+//| Expert tick function                                             |
+//+------------------------------------------------------------------+
+void OnTick()
+{
+   // FastAPI server URL
+   string url = "http://127.0.0.1:8000/webhook";  // Replace with your actual server URL if necessary
+
+   // Variables for the WebRequest function
+   string cookie = NULL;
+   string referer = NULL;
+   int timeout = 5000;  // Timeout in milliseconds
+   char postData[];
+   int data_size = 0;  // No data for GET request
+   char result[];
+   string result_headers;
+
+   // Make GET request to retrieve the latest price
    int response = WebRequest("GET", url, cookie, referer, timeout, postData, data_size, result, result_headers);
 
    // Check for errors in the WebRequest
@@ -137,17 +153,25 @@ void OnStart()
       return;
    }
 
-   // Convert the response to string
+   // Convert the response to a string
    string json_response = CharArrayToString(result);
 
-   // Print the received data (JSON response)
-   Print("Received data: ", json_response);
+   // Parse the response to extract the price (assuming response is in JSON format like {"current_price": 1.3171})
+   double price = 0.0;
+   int parse_start = StringFind(json_response, ":") + 1;
+   int parse_end = StringFind(json_response, "}");
+   if(parse_start > 0 && parse_end > parse_start)
+   {
+      price = StringToDouble(StringSubstr(json_response, parse_start, parse_end - parse_start));
+   }
 
-   // Optionally print response headers
-   Print("Response headers: ", result_headers);
+   // Print the received price
+   Print("Received price: ", price);
+
+   // You can now use the price in your trading logic (e.g., open/close trades based on the price)
 }
 
-
+//+------------------------------------------------------------------+
 
 
 
