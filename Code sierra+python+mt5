@@ -10,54 +10,72 @@ SCSFExport scsf_SendDataToMT5(SCStudyInterfaceRef sc)
     if (sc.SetDefaults)
     {
         sc.GraphName = "Send Data to MT5";
-        sc.StudyDescription = "This study sends data to MT5 via HTTP POST request.";
+        sc.StudyDescription = "This study sends data to MT5 via HTTP POST request every 5 seconds.";
         
         enable.Name = "Enable";
         enable.SetYesNo(true);  // Default to enabled
         
         sc.AutoLoop = 0;  // Disable auto-looping
+        sc.UpdateAlways = 1;  // Ensure that the study is updated every chart update (so we can time the requests)
+        
         return;
     }
 
     bool enableSendSignal = enable.GetBoolean();  // Check if sending is enabled
+    if (!enableSendSignal)
+        return;
 
-    int& RequestState = sc.GetPersistentInt(1);  // Persistent variable to track request state
-    double Price = sc.Close[sc.ArraySize-1];  // Current closing price
+    // Track the last time we sent the data (using persistent variable)
+    SCDateTime& LastRequestTime = sc.GetPersistentSCDateTime(1);
 
-    // Initialize the request if this is the first update or a full recalculation
-    if (sc.UpdateStartIndex == 0 && sc.IsFullRecalculation)
+    // Current closing price, high, low, and random number
+    double Price = sc.Close[sc.ArraySize-1];
+    double High = sc.High[sc.ArraySize-1];
+    double Low = sc.Low[sc.ArraySize-1];
+    int randomNumber = std::rand() % 1000;
+
+    // Get the current system time
+    SCDateTime CurrentTime = sc.CurrentSystemDateTime;
+
+    // Check if 5 seconds have passed since the last request
+    if (CurrentTime.GetTimeInSeconds() - LastRequestTime.GetTimeInSeconds() >= 5)
     {
-        // Handle initialization if needed
-    }
+        // Get the time of the current candle
+        //SCDateTimeMS CurrentCandleTime = sc.BaseDateTimeIn[sc.ArraySize-1];
+		SCDateTimeMS CurrentCandleTime = CurrentTime;
+        int Year, Month, Day, Hour, Minute, Second;
+        CurrentCandleTime.GetDateTimeYMDHMS(Year, Month, Day, Hour, Minute, Second);
 
-    // Send HTTP POST request if the request state is either error or request received
-    if ((RequestState == HTTP_REQUEST_ERROR || RequestState == HTTP_REQUEST_RECEIVED) && enableSendSignal)
-    {
-        n_ACSIL::s_HTTPHeader HTTPHeader;
-        HTTPHeader.Name = "Content-Type";
-        HTTPHeader.Value = "application/json";  // Content type for JSON data
+        // Format the candle time into a string (ISO 8601 format: YYYY-MM-DD HH:MM:SS)
+        SCString TimeString;
+        TimeString.Format("%04d-%02d-%02d %02d:%02d:%02d", Year, Month, Day, Hour, Minute, Second);
 
+        // Prepare the POST data as JSON including price, high, low, random number, and time
         SCString postData;
-        postData.Format("{\"price\": %f}", Price);  // Prepare POST data as JSON
+        postData.Format("{\"price\": %f, \"high\": %f, \"low\": %f, \"random\": %d, \"time\": \"%s\"}", Price, High, Low, randomNumber, TimeString.GetChars());
 
         const char* serverURL = "http://localhost:8000/webhook";  // URL of your FastAPI server
 
-        // Make HTTP POST request
+        // Set up the HTTP header
+        n_ACSIL::s_HTTPHeader HTTPHeader;
+        HTTPHeader.Name = "Content-Type";
+        HTTPHeader.Value = "application/json";
+
+        // Make the HTTP POST request
         if (!sc.MakeHTTPPOSTRequest(serverURL, postData.GetChars(), &HTTPHeader, 1))
         {
             sc.AddMessageToLog("Error making HTTP request.", 1);  // Log error if request fails
         }
+        else
+        {
+            sc.AddMessageToLog("HTTP request sent successfully.", 0);  // Log successful request
+        }
 
-        RequestState = HTTP_REQUEST_MADE;  // Update request state
-    }
-
-    // Handle HTTP response
-    if (RequestState == HTTP_REQUEST_MADE && sc.HTTPRequestID != 0)
-    {
-        RequestState = HTTP_REQUEST_RECEIVED;  // Update request state to received
-        sc.AddMessageToLog(sc.HTTPResponse, 0);  // Log the HTTP response
+        // Update the last request time
+        LastRequestTime = CurrentTime;
     }
 }
+
 
 
 
@@ -72,25 +90,53 @@ import uvicorn
 
 app = FastAPI()
 
-# Class to represent the price data
+# Global variable to store the latest received data
+latest_data = {
+    "price": None,
+    "high": None,
+    "low": None,
+    "random": None,
+    "time": None
+}
+
+# Class to represent the incoming data
 class Item(BaseModel):
     price: float
+    high: float
+    low: float
+    random: int
+    time: str
 
-# Global variable to store the latest received price
-current_price = 0.0
-
-# POST request to receive and process price data
+# POST request to receive and process data
 @app.post("/webhook")
 async def webhook(item: Item):
-    global current_price
-    current_price = item.price
-    print(f"Received price: {current_price}")
-    return {"status": "success", "received_price": current_price}
+    global latest_data
+    # Update the global variable with the received data
+    latest_data = {
+        "price": item.price,
+        "high": item.high,
+        "low": item.low,
+        "random": item.random,
+        "time": item.time
+    }
+    
+    # Print received data
+    print(f"Received data - Price: {item.price}, High: {item.high}, Low: {item.low}, Random: {item.random}, Time: {item.time}")
 
-# GET request to retrieve the latest price
+    # Return a JSON response with received data
+    return {
+        "status": "success",
+        "received_data": latest_data
+    }
+
+# GET request to retrieve the latest data
 @app.get("/webhook")
 async def get_price():
-    return {"current_price": current_price}
+    # Return the latest received data
+    return {
+        "status": "ready",
+        "latest_data": latest_data
+    }
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
@@ -107,9 +153,6 @@ if __name__ == "__main__":
 
 
 
-//+------------------------------------------------------------------+
-//| Expert initialization function                                   |
-//+------------------------------------------------------------------+
 int OnInit()
 {
    // Print initialization message
@@ -142,7 +185,7 @@ void OnTick()
    char result[];
    string result_headers;
 
-   // Make GET request to retrieve the latest price
+   // Make GET request to retrieve the latest data
    int response = WebRequest("GET", url, cookie, referer, timeout, postData, data_size, result, result_headers);
 
    // Check for errors in the WebRequest
@@ -156,25 +199,45 @@ void OnTick()
    // Convert the response to a string
    string json_response = CharArrayToString(result);
 
-   // Parse the response to extract the price (assuming response is in JSON format like {"current_price": 1.3171})
-   double price = 0.0;
-   int parse_start = StringFind(json_response, ":") + 1;
-   int parse_end = StringFind(json_response, "}");
-   if(parse_start > 0 && parse_end > parse_start)
+   // Print the raw JSON response
+   Print("Raw JSON response: ", json_response);
+
+   // Parse the response to extract the price, random number, and time
+   string price_str = "";
+   string random_str = "";
+   string time_str = "";
+
+   // Find and extract the price value
+   int price_start = StringFind(json_response, "\"price\":") + 8;
+   int price_end = StringFind(json_response, ",", price_start);
+   if(price_start > 8 && price_end > price_start)
    {
-      price = StringToDouble(StringSubstr(json_response, parse_start, parse_end - parse_start));
+      price_str = StringSubstr(json_response, price_start, price_end - price_start);
    }
 
-   // Print the received price
-   Print("Received price: ", price);
+   // Find and extract the random number
+   int random_start = StringFind(json_response, "\"random\":") + 10;
+   int random_end = StringFind(json_response, ",", random_start);
+   if(random_start > 10 && random_end > random_start)
+   {
+      random_str = StringSubstr(json_response, random_start, random_end - random_start);
+   }
 
-   // You can now use the price in your trading logic (e.g., open/close trades based on the price)
+   // Find and extract the time value
+   int time_start = StringFind(json_response, "\"time\":") + 8;
+   int time_end = StringFind(json_response, "\"", time_start + 1);
+   if(time_start > 8 && time_end > time_start)
+   {
+      time_str = StringSubstr(json_response, time_start + 1, time_end - time_start - 1);
+   }
+
+   // Convert extracted values to their appropriate types
+   double price = StringToDouble(price_str);
+   int randomNumber = StringToInteger(random_str);
+
+   // Print the extracted values
+   Print("Price: ", price, ", Random: ", randomNumber, ", Time: ", time_str);
 }
-
-//+------------------------------------------------------------------+
-
-
-
 
 
 
