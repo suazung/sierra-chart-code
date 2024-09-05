@@ -1,0 +1,292 @@
+
+
+
+
+#include "sierrachart.h"
+#include <sstream>
+
+SCDLLName("EXAMPLE HTTP")
+
+
+
+SCSFExport scsf_SendDataToMT5(SCStudyInterfaceRef sc)
+{
+    SCInputRef enable = sc.Input[0];
+
+    if (sc.SetDefaults)
+    {
+        sc.GraphName = "Send Data to MT5";
+        sc.StudyDescription = "This study sends data to MT5 via HTTP POST request every 5 seconds.";
+        
+        enable.Name = "Enable";
+        enable.SetYesNo(true);
+        
+        sc.AutoLoop = 0;
+        sc.UpdateAlways = 1;
+        
+        return;
+    }
+
+    bool enableSendSignal = enable.GetBoolean();
+    if (!enableSendSignal)
+        return;
+
+    SCDateTime& LastRequestTime = sc.GetPersistentSCDateTime(1);
+
+    double Price = sc.Close[sc.ArraySize-1];
+    double High = sc.High[sc.ArraySize-1];
+    double Low = sc.Low[sc.ArraySize-1];
+    int randomNumber = std::rand() % 1000;
+
+    SCDateTime CurrentTime = sc.CurrentSystemDateTime;
+
+    if (CurrentTime.GetTimeInSeconds() - LastRequestTime.GetTimeInSeconds() >= 5)
+    {
+        SCDateTimeMS CurrentCandleTime = CurrentTime;
+        int Year, Month, Day, Hour, Minute, Second;
+        CurrentCandleTime.GetDateTimeYMDHMS(Year, Month, Day, Hour, Minute, Second);
+
+        SCString TimeString;
+        TimeString.Format("%04d-%02d-%02d %02d:%02d:%02d", Year, Month, Day, Hour, Minute, Second);
+
+        SCString postData;
+        postData.Format("{\"price\": %f, \"high\": %f, \"low\": %f, \"random\": %d, \"time\": \"%s\"}", Price, High, Low, randomNumber, TimeString.GetChars());
+
+        const char* serverURL = "http://localhost:8000/webhook";
+
+        n_ACSIL::s_HTTPHeader HTTPHeader;
+        HTTPHeader.Name = "Content-Type";
+        HTTPHeader.Value = "application/json";
+
+        if (!sc.MakeHTTPPOSTRequest(serverURL, postData.GetChars(), &HTTPHeader, 1))
+        {
+            sc.AddMessageToLog("Error making HTTP request.", 1);
+        }
+        else
+        {
+            sc.AddMessageToLog("HTTP request sent successfully.", 0);
+
+            // Check if MT5 has received the data
+            SCString ackURL = "http://localhost:8000/acknowledge";
+            if (!sc.MakeHTTPPOSTRequest(ackURL.GetChars(), postData.GetChars(), &HTTPHeader, 1))
+            {
+                sc.AddMessageToLog("Error checking acknowledgment.", 1);
+            }
+            else
+            {
+                sc.AddMessageToLog("Acknowledgment request sent.", 0);
+            }
+        }
+
+        LastRequestTime = CurrentTime;
+    }
+}
+
+
+
+
+
+// *************************************************************************************************************************
+
+
+
+
+
+from fastapi import FastAPI, HTTPException , Request
+from pydantic import BaseModel
+import uvicorn
+
+app = FastAPI()
+
+latest_data = {
+    "price": None,
+    "high": None,
+    "low": None,
+    "random": None,
+    "time": None
+}
+
+class Item(BaseModel):
+    price: float
+    high: float
+    low: float
+    random: int
+    time: str
+    
+    # Class for acknowledgment data
+class AcknowledgeData(BaseModel):
+    status: str
+    
+    # Class for the acknowledgment data
+class AckData(BaseModel):
+    random: int
+    
+
+@app.post("/webhook")
+async def webhook(item: Item):
+    global latest_data
+    latest_data = {
+        "price": item.price,
+        "high": item.high,
+        "low": item.low,
+        "random": item.random,
+        "time": item.time
+    }
+    print(f"Received data - Price: {item.price}, High: {item.high}, Low: {item.low}, Random: {item.random}, Time: {item.time}")
+    return {"status": "success", "received_data": latest_data}
+
+# POST route to acknowledge the data
+@app.post("/acknowledge")
+async def acknowledge(request: Request):
+    # Print the raw body of the request for debugging
+    body = await request.body()
+    print(f"Received raw data: {body.decode('utf-8')}")
+    
+    # Process the request if needed (parse JSON)
+    try:
+        data = await request.json()  # Try parsing the JSON data
+        print(f"Parsed JSON data: {data}")
+    except Exception as e:
+        print(f"Error parsing JSON: {e}")
+        return {"message": "Invalid JSON"}
+
+    return {"message": "Acknowledgment received successfully"}
+
+
+
+
+@app.get("/webhook")
+async def get_price():
+    return {"status": "ready", "latest_data": latest_data}
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+
+
+
+
+// *************************************************************************************************************************
+
+
+
+
+
+int OnInit()
+{
+   // Print initialization message
+   Print("Expert initialized. Waiting for ticks...");
+   return(INIT_SUCCEEDED);
+}
+
+//+------------------------------------------------------------------+
+//| Expert deinitialization function                                 |
+//+------------------------------------------------------------------+
+void OnDeinit(const int reason)
+{
+   Print("Expert deinitialized.");
+}
+
+//+------------------------------------------------------------------+
+//| Expert tick function                                             |
+//+------------------------------------------------------------------+
+void OnTick()
+{
+    string url = "http://127.0.0.1:8000/webhook";
+    string cookie = NULL;
+    string referer = NULL;
+    int timeout = 5000;
+    char postData[];
+    int data_size = 0;  // No data for GET request
+    char result[];
+    string result_headers;
+
+    // Make the GET request to receive data
+    int response = WebRequest("GET", url, cookie, referer, timeout, postData, data_size, result, result_headers);
+
+    if (response == -1)
+    {
+        int error_code = GetLastError();
+        Print("Error making the request: ", error_code);
+        return;
+    }
+
+    string json_response = CharArrayToString(result);
+    Print("Raw JSON response: ", json_response);
+
+    // Variables to hold the parsed values
+    string price_str = "";
+    string random_str = "";
+    string time_str = "";
+
+    // Parse the price from the JSON response
+    int price_start = StringFind(json_response, "\"price\":") + 8;
+    int price_end = StringFind(json_response, ",", price_start);
+    if (price_start > 8 && price_end > price_start)
+    {
+        price_str = StringSubstr(json_response, price_start, price_end - price_start);
+    }
+
+    // Parse the random number from the JSON response
+    int random_start = StringFind(json_response, "\"random\":") + 10;
+    int random_end = StringFind(json_response, ",", random_start);
+    if (random_start > 10 && random_end > random_start)
+    {
+        random_str = StringSubstr(json_response, random_start, random_end - random_start);
+    }
+
+    // Parse the time from the JSON response
+    int time_start = StringFind(json_response, "\"time\":") + 8;
+    int time_end = StringFind(json_response, "\"", time_start + 1);
+    if (time_start > 8 && time_end > time_start)
+    {
+        time_str = StringSubstr(json_response, time_start + 1, time_end - time_start - 1);
+    }
+
+    // Convert the parsed strings into appropriate types
+    double price = StringToDouble(price_str);
+    int randomNumber = StringToInteger(random_str);
+
+    // Print the parsed values
+    Print("Price: ", price, ", Random: ", randomNumber, ", Time: ", time_str);
+
+    // Send acknowledgment to FastAPI
+   string ackURL = "http://127.0.0.1:8000/acknowledge";
+   string ackHeaders = "Content-Type: application/json\r\n";  // Set content type as JSON
+   string ackPayload = "{\"status\": \"received\"}";  // JSON payload
+   
+   //char ackData[];
+   //StringToCharArray(ackPayload, ackData);  // Convert the payload to a char array
+   
+   //char postData[];
+   string ackData = "{\"random\": " + IntegerToString(randomNumber*100) + "}";  // Send random number
+   StringToCharArray(ackData, postData);  // Convert string to char array
+   
+   char ackResult[];
+   string ackResultHeaders;
+   
+   // Make the POST request to send acknowledgment
+   //int ackResponse = WebRequest("POST", ackURL, ackHeaders, timeout, ackData, ackResult, ackResultHeaders);
+    int ackResponse = WebRequest("POST", ackURL, ackHeaders, timeout, postData, ackResult, ackResultHeaders);
+   
+   if (ackResponse == -1)
+   {
+       int ackErrorCode = GetLastError();
+       Print("Error sending acknowledgment: ", ackErrorCode);
+       return;
+   }
+   
+   Print("Acknowledgment sent.");
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
