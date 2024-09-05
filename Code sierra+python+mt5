@@ -1,0 +1,167 @@
+#include "sierrachart.h"
+#include <sstream>
+
+SCDLLName("EXAMPLE HTTP")
+
+SCSFExport scsf_SendDataToMT5(SCStudyInterfaceRef sc)
+{
+    SCInputRef enable = sc.Input[0];  // Input to enable or disable the functionality
+
+    if (sc.SetDefaults)
+    {
+        sc.GraphName = "Send Data to MT5";
+        sc.StudyDescription = "This study sends data to MT5 via HTTP POST request.";
+        
+        enable.Name = "Enable";
+        enable.SetYesNo(true);  // Default to enabled
+        
+        sc.AutoLoop = 0;  // Disable auto-looping
+        return;
+    }
+
+    bool enableSendSignal = enable.GetBoolean();  // Check if sending is enabled
+
+    int& RequestState = sc.GetPersistentInt(1);  // Persistent variable to track request state
+    double Price = sc.Close[sc.ArraySize-1];  // Current closing price
+
+    // Initialize the request if this is the first update or a full recalculation
+    if (sc.UpdateStartIndex == 0 && sc.IsFullRecalculation)
+    {
+        // Handle initialization if needed
+    }
+
+    // Send HTTP POST request if the request state is either error or request received
+    if ((RequestState == HTTP_REQUEST_ERROR || RequestState == HTTP_REQUEST_RECEIVED) && enableSendSignal)
+    {
+        n_ACSIL::s_HTTPHeader HTTPHeader;
+        HTTPHeader.Name = "Content-Type";
+        HTTPHeader.Value = "application/json";  // Content type for JSON data
+
+        SCString postData;
+        postData.Format("{\"price\": %f}", Price);  // Prepare POST data as JSON
+
+        const char* serverURL = "http://localhost:8000/webhook";  // URL of your FastAPI server
+
+        // Make HTTP POST request
+        if (!sc.MakeHTTPPOSTRequest(serverURL, postData.GetChars(), &HTTPHeader, 1))
+        {
+            sc.AddMessageToLog("Error making HTTP request.", 1);  // Log error if request fails
+        }
+
+        RequestState = HTTP_REQUEST_MADE;  // Update request state
+    }
+
+    // Handle HTTP response
+    if (RequestState == HTTP_REQUEST_MADE && sc.HTTPRequestID != 0)
+    {
+        RequestState = HTTP_REQUEST_RECEIVED;  // Update request state to received
+        sc.AddMessageToLog(sc.HTTPResponse, 0);  // Log the HTTP response
+    }
+}
+
+
+
+
+
+//******************************************************************************************************************************************************
+
+
+from fastapi import FastAPI
+from pydantic import BaseModel
+import uvicorn
+
+app = FastAPI()
+
+# Class to represent the price data
+class Item(BaseModel):
+    price: float
+
+# Global variable to store the latest received price
+current_price = 0.0
+
+# POST request to receive and process price data
+@app.post("/webhook")
+async def webhook(item: Item):
+    global current_price
+    current_price = item.price
+    print(f"Received price: {current_price}")
+    return {"status": "success", "received_price": current_price}
+
+# GET request to retrieve the latest price
+@app.get("/webhook")
+async def get_price():
+    return {"current_price": current_price}
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+
+
+
+
+
+
+
+//******************************************************************************************************************************************************
+
+
+
+
+
+#property strict
+
+input string url = "http://127.0.0.1:8000/webhook";  // FastAPI server URL to get the price
+
+//+------------------------------------------------------------------+
+//| Script program start function                                    |
+//+------------------------------------------------------------------+
+void OnStart()
+{
+   string cookie = NULL;       // No cookies
+   string referer = NULL;      // No referer
+   int timeout = 5000;         // Timeout for the request in milliseconds (5 seconds)
+   
+   char postData[];            // Empty postData for GET request
+   int data_size = 0;          // No data for GET request
+   
+   char result[];              // Array to store the server's response
+   string result_headers;      // String to store the response headers
+
+   // Make the HTTP GET request
+   int response = WebRequest("GET", url, cookie, referer, timeout, postData, data_size, result, result_headers);
+
+   // Check for errors in the WebRequest
+   if(response == -1)
+   {
+      int error_code = GetLastError();
+      Print("Error making the request: ", error_code);
+      return;
+   }
+
+   // Convert the response to string
+   string json_response = CharArrayToString(result);
+
+   // Print the received data (JSON response)
+   Print("Received data: ", json_response);
+
+   // Optionally print response headers
+   Print("Response headers: ", result_headers);
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
