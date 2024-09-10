@@ -250,3 +250,112 @@ void sendHttpPostMessage( SCStudyInterfaceRef sc ,int uniqNumber , int signal , 
 
 
 
+
+// ***************************************************************************************************************************
+
+
+
+
+from fastapi import FastAPI
+from pydantic import BaseModel
+import uvicorn
+
+app = FastAPI()
+
+latest_data = {
+    "uniq": None,
+    "time": None
+}
+
+latest_signal = {
+    "uniq": None,
+    "signal": None,
+    "m1time": None,
+    "currenttime": None
+}
+
+class Item(BaseModel):
+    uniq: int
+    time: str
+    
+    
+class Signal(BaseModel):
+    uniq: int
+    signal: int
+    m1time: str
+    currenttime: str
+
+
+@app.post("/webhook")
+async def webhook(item: Item):
+    global latest_data
+    latest_data = {
+        "random": item.uniq,
+        "time": item.time
+    }
+    print(f"Received data - Random: {item.uniq}, Time: {item.time}")
+    return {"status": "success", "received_data": latest_data}
+
+@app.get("/webhook")
+async def get_price():
+    return {"status": "ready", "latest_data": latest_data}
+
+
+
+
+@app.post("/simplesignal")
+async def simplesignal(sig: Signal):
+    global latest_signal
+    latest_signal = {
+        "uniq": sig.uniq,
+        "signal": sig.signal,
+        "m1time": sig.m1time,
+        "currenttime": sig.currenttime
+    }
+    print(f"Received signal - unique number: {sig.uniq}, signal: {sig.signal}, M1 Time: {sig.m1time}, Now Time: {sig.currenttime}")
+    return {"status": "success", "received_signala": latest_signal}
+
+
+
+
+@app.get("/simplesignal")
+async def get_signal():
+    return {"status": "ready", "latest_signal": latest_signal}
+
+
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
