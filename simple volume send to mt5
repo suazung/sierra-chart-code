@@ -262,10 +262,6 @@ import uvicorn
 
 app = FastAPI()
 
-latest_data = {
-    "uniq": None,
-    "time": None
-}
 
 latest_signal = {
     "uniq": None,
@@ -274,31 +270,12 @@ latest_signal = {
     "currenttime": None
 }
 
-class Item(BaseModel):
-    uniq: int
-    time: str
-    
     
 class Signal(BaseModel):
     uniq: int
     signal: int
     m1time: str
     currenttime: str
-
-
-@app.post("/webhook")
-async def webhook(item: Item):
-    global latest_data
-    latest_data = {
-        "random": item.uniq,
-        "time": item.time
-    }
-    print(f"Received data - Random: {item.uniq}, Time: {item.time}")
-    return {"status": "success", "received_data": latest_data}
-
-@app.get("/webhook")
-async def get_price():
-    return {"status": "ready", "latest_data": latest_data}
 
 
 
@@ -326,24 +303,6 @@ async def get_signal():
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
