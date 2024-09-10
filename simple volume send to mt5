@@ -1,0 +1,246 @@
+
+
+
+
+
+
+
+
+
+#include "sierrachart.h"
+
+
+SCDLLName("Send Simple Signal To M5 DLL")
+
+
+
+
+SCSFExport scsf_SimpleVolRangeBar(SCStudyInterfaceRef sc)
+{
+	
+	int M1ChartNumber = 7;         // M1 is chart 7
+	
+	int uniqNumber = 5414;
+	
+	// Section 1 - Set the configuration variables and defaults
+	if (sc.SetDefaults)
+	{
+		sc.GraphName = "Simple Vol Range Bar ";
+
+		sc.AutoLoop = 0;  //Automatic looping is enabled. 
+		
+		sc.GraphRegion = 2;
+		
+		sc.Subgraph[0].Name = "Buy SIGNAL";
+		sc.Subgraph[0].DrawStyle = DRAWSTYLE_BAR;
+        sc.Subgraph[0].LineWidth = 7;
+		
+		sc.Subgraph[1].Name = "SELL SIGNAL";
+		sc.Subgraph[1].DrawStyle = DRAWSTYLE_BAR;
+        sc.Subgraph[1].LineWidth = 7;
+		
+		return;
+	}
+	
+	
+	int& count = sc.GetPersistentInt(0);
+	count = 0;
+
+	
+	SCDateTimeArray DateTimeArray;
+    sc.GetChartDateTimeArray(M1ChartNumber, DateTimeArray); 
+
+	SCGraphData M1GraphData;
+    // Get the base graph data from the specified chart
+    sc.GetChartBaseData(M1ChartNumber, M1GraphData);
+
+    // Define a reference to the High array
+    SCFloatArrayRef HighArrayM1 = M1GraphData[SC_HIGH];
+	SCFloatArrayRef LowArrayM1 = M1GraphData[SC_LOW];
+	SCFloatArrayRef OpenArrayM1 = M1GraphData[SC_OPEN];
+	SCFloatArrayRef CloseArrayM1 = M1GraphData[SC_LAST];
+
+	 int currentM1Index = OpenArrayM1.GetArraySize() - 1;
+	int lastM1Index = currentM1Index-1 ;
+	
+	float volume = 0;
+	float low = 0;
+	float high = 0;
+	int signal = 0;   // -1 mean sell    , 1 mean buy
+	SCDateTime time;
+		
+		
+	SCString message;	
+	
+	
+	if (DateTimeArray.GetArraySize() == 0)  return;  
+	
+
+	
+	// Do data processing
+    for (int Index = sc.UpdateStartIndex; Index < sc.ArraySize; Index++)
+    {    
+		
+		//if(Index == 0) continue ;
+		
+		signal = 0; 
+		
+		int RefChartIndex =sc.GetNearestMatchForDateTimeIndex(M1ChartNumber,Index);
+				
+				
+		if( sc.Volume[Index] >= 2*sc.Volume[Index-1])
+		{
+			if(sc.Close[Index] - sc.Open[Index] > 0)   // green
+			{
+				sc.Subgraph[0][Index] = 1;
+				signal = 1;
+				low = sc.Low[Index] ;
+				high = sc.High[Index] ;
+				
+				int lowInTick = sc.PriceValueToTicks(low) ;
+				int lowM1InTick = -1 ;
+				
+				
+				for(int i = RefChartIndex ; i >=0 ; i--)
+				{
+					lowM1InTick = sc.PriceValueToTicks(LowArrayM1[i]) ;
+					if( lowInTick ==  lowM1InTick) 
+					{
+						// send to mt5
+						//SCString IndexDateTime = ;
+						//M1Time[i]//                         DateTimeArray[i]
+						time = DateTimeArray[i] ;
+						message.Format("BUY | index range = %d ", Index ); // sc.CurrentSystemDateTime
+						sc.AddMessageToLog(message, 0);
+						SCString DateTimeString = "time m1 = " ; 
+						DateTimeString += sc.DateTimeToString(DateTimeArray[i],FLAG_DT_COMPLETE_DATETIME);
+						sc.AddMessageToLog(DateTimeString, 0);
+						break;
+					}
+				}
+			
+			}				
+				
+			else if(sc.Close[Index] - sc.Open[Index] < 0)   // red
+			{
+				sc.Subgraph[1][Index] = 1;
+				signal = -1;
+				low = sc.Low[Index] ;
+				high = sc.High[Index] ;
+				
+				int highInTick = sc.PriceValueToTicks(high) ;
+				int highM1InTick = -1 ;
+				
+				for(int i = RefChartIndex ; i >=0 ; i--)
+				{
+					highM1InTick = sc.PriceValueToTicks(HighArrayM1[i]) ;
+					if( highInTick ==  highM1InTick) 
+					{
+						// send to mt5
+						//SCString IndexDateTime = ;
+						//M1Time[i]
+						time = DateTimeArray[i] ;
+						message.Format("SELL | index range = %d " , Index  );
+						sc.AddMessageToLog(message, 0);
+						SCString DateTimeString = "time m1 = " ; 
+						DateTimeString += sc.DateTimeToString(DateTimeArray[i],FLAG_DT_COMPLETE_DATETIME);
+						sc.AddMessageToLog(DateTimeString, 0);
+						break;
+					}
+				}
+				
+				
+			}
+			
+			
+			
+		
+			
+			
+				
+		}
+	
+	}
+	
+	
+	
+	int currentIndex = sc.UpdateStartIndex ;
+
+	if(currentIndex >= sc.DataStartIndex && sc.Subgraph[0][currentIndex-1] == 1 && signal != 0)
+	{
+		int Year, Month, Day, Hour, Minute, Second;
+		time.GetDateTimeYMDHMS(Year, Month, Day, Hour, Minute, Second);
+
+		SCString TimeString;
+		TimeString.Format("%04d-%02d-%02d %02d:%02d:%02d", Year, Month, Day, Hour, Minute, Second);
+		
+		if(uniqNumber >= 5430) uniqNumber = 1000;
+		
+		count++;
+		uniqNumber += count;
+
+		SCString postData;
+		postData.Format("{\"uniq\": %d, \"signal\": %d , \"time\": \"%s\"}" , uniqNumber , signal , TimeString.GetChars() ) ;
+
+		const char* serverURL = "http://localhost:8000/simplesignal";
+		
+		
+		 n_ACSIL::s_HTTPHeader HTTPHeader;
+		HTTPHeader.Name = "Content-Type";
+		HTTPHeader.Value = "application/json";
+
+		if (!sc.MakeHTTPPOSTRequest(serverURL, postData.GetChars(), &HTTPHeader, 1))
+		{
+			sc.AddMessageToLog("Error making HTTP request.", 0);
+		}
+		else
+		{
+			sc.AddMessageToLog("HTTP request sent successfully.", 0);
+
+		
+		}
+	}	
+	else if(currentIndex >= sc.DataStartIndex && sc.Subgraph[1][currentIndex-1] == 1 && signal != 0 )
+	{
+		int Year, Month, Day, Hour, Minute, Second;
+		time.GetDateTimeYMDHMS(Year, Month, Day, Hour, Minute, Second);
+
+		SCString TimeString;
+		TimeString.Format("%04d-%02d-%02d %02d:%02d:%02d", Year, Month, Day, Hour, Minute, Second);
+		
+		if(uniqNumber >= 5430) uniqNumber = 1000;
+		
+		count++;
+		uniqNumber += count;
+
+		SCString postData;
+		postData.Format("{\"uniq\": %d, \"signal\": %d , \"time\": \"%s\"}" , uniqNumber , signal , TimeString.GetChars() ) ;
+
+		const char* serverURL = "http://localhost:8000/simplesignal";
+		
+		
+		 n_ACSIL::s_HTTPHeader HTTPHeader;
+		HTTPHeader.Name = "Content-Type";
+		HTTPHeader.Value = "application/json";
+
+		if (!sc.MakeHTTPPOSTRequest(serverURL, postData.GetChars(), &HTTPHeader, 1))
+		{
+			sc.AddMessageToLog("Error making HTTP request.", 0);
+		}
+		else
+		{
+			sc.AddMessageToLog("HTTP request sent successfully.", 0);
+
+		
+		}
+		
+	}	
+		
+	
+	
+	
+}
+
+
+
+
