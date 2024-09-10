@@ -12,15 +12,15 @@
 
 SCDLLName("Send Simple Signal To M5 DLL")
 
-
+void sendHttpPostMessage( SCStudyInterfaceRef sc ,int uniqNumber , int signal , SCString m1TimeString , SCString currentTimeString) ;
 
 
 SCSFExport scsf_SimpleVolRangeBar(SCStudyInterfaceRef sc)
 {
 	
 	int M1ChartNumber = 7;         // M1 is chart 7
+	int uniqNumber = 5445;
 	
-	int uniqNumber = 5414;
 	
 	// Section 1 - Set the configuration variables and defaults
 	if (sc.SetDefaults)
@@ -44,7 +44,12 @@ SCSFExport scsf_SimpleVolRangeBar(SCStudyInterfaceRef sc)
 	
 	
 	int& count = sc.GetPersistentInt(0);
-	count = 0;
+	sc.SetPersistentInt(0, 0);
+	//count = 0;
+	//int& uniqNumber = sc.GetPersistentInt(1);
+	//sc.SetPersistentInt(1, 5414);
+	
+	//int uniqNumber = 5414;
 
 	
 	SCDateTimeArray DateTimeArray;
@@ -83,6 +88,13 @@ SCSFExport scsf_SimpleVolRangeBar(SCStudyInterfaceRef sc)
 		
 		//if(Index == 0) continue ;
 		
+		if(sc.GetBarHasClosedStatus(Index)==BHCS_BAR_HAS_NOT_CLOSED)
+		{
+
+			return;//do not do any processing if the bar at  the current index has not closed
+		}
+
+		
 		signal = 0; 
 		
 		int RefChartIndex =sc.GetNearestMatchForDateTimeIndex(M1ChartNumber,Index);
@@ -90,7 +102,9 @@ SCSFExport scsf_SimpleVolRangeBar(SCStudyInterfaceRef sc)
 				
 		if( sc.Volume[Index] >= 2*sc.Volume[Index-1])
 		{
-			if(sc.Close[Index] - sc.Open[Index] > 0)   // green
+			
+				
+			if( sc.PriceValueToTicks(sc.Close[Index]) - sc.PriceValueToTicks(sc.Low[Index]) > 0)   // up
 			{
 				sc.Subgraph[0][Index] = 1;
 				signal = 1;
@@ -106,22 +120,44 @@ SCSFExport scsf_SimpleVolRangeBar(SCStudyInterfaceRef sc)
 					lowM1InTick = sc.PriceValueToTicks(LowArrayM1[i]) ;
 					if( lowInTick ==  lowM1InTick) 
 					{
-						// send to mt5
-						//SCString IndexDateTime = ;
-						//M1Time[i]//                         DateTimeArray[i]
-						time = DateTimeArray[i] ;
-						message.Format("BUY | index range = %d ", Index ); // sc.CurrentSystemDateTime
+						uniqNumber += Index;															
+						
+						message.Format("BUY | index range = %d , uniq = %d" , Index , uniqNumber   ); // sc.CurrentSystemDateTime
 						sc.AddMessageToLog(message, 0);
+						
 						SCString DateTimeString = "time m1 = " ; 
 						DateTimeString += sc.DateTimeToString(DateTimeArray[i],FLAG_DT_COMPLETE_DATETIME);
+						
 						sc.AddMessageToLog(DateTimeString, 0);
+						
+						int Year, Month, Day, Hour, Minute, Second;
+						
+
+						SCString M1TimeString , currentTimeString;
+						
+						SCDateTime m1time = DateTimeArray[i] ;
+						m1time.GetDateTimeYMDHMS(Year, Month, Day, Hour, Minute, Second);
+						M1TimeString.Format("%04d.%02d.%02d %02d:%02d", Year, Month, Day, Hour, Minute);						
+						
+						SCDateTime currentTime = sc.CurrentSystemDateTime;
+						currentTime.GetDateTimeYMDHMS(Year, Month, Day, Hour, Minute, Second);						
+						currentTimeString.Format("%04d.%02d.%02d %02d:%02d", Year, Month, Day, Hour, Minute);
+						
+						
+						if (Index == sc.ArraySize - 1 - 1) 
+						{
+									
+							sendHttpPostMessage( sc, uniqNumber ,  signal ,  M1TimeString , currentTimeString) ;
+							
+						}		
+		
 						break;
 					}
 				}
 			
 			}				
 				
-			else if(sc.Close[Index] - sc.Open[Index] < 0)   // red
+			else if(sc.PriceValueToTicks(sc.Close[Index]) - sc.PriceValueToTicks(sc.Low[Index]) <= 0)   // down
 			{
 				sc.Subgraph[1][Index] = 1;
 				signal = -1;
@@ -136,110 +172,80 @@ SCSFExport scsf_SimpleVolRangeBar(SCStudyInterfaceRef sc)
 					highM1InTick = sc.PriceValueToTicks(HighArrayM1[i]) ;
 					if( highInTick ==  highM1InTick) 
 					{
-						// send to mt5
-						//SCString IndexDateTime = ;
-						//M1Time[i]
-						time = DateTimeArray[i] ;
-						message.Format("SELL | index range = %d " , Index  );
+						uniqNumber += Index;															
+						
+						message.Format("SELL | index range = %d , uniq = %d" , Index , uniqNumber   ); // sc.CurrentSystemDateTime
 						sc.AddMessageToLog(message, 0);
+						
 						SCString DateTimeString = "time m1 = " ; 
 						DateTimeString += sc.DateTimeToString(DateTimeArray[i],FLAG_DT_COMPLETE_DATETIME);
+						
 						sc.AddMessageToLog(DateTimeString, 0);
+						
+						int Year, Month, Day, Hour, Minute, Second;
+						
+
+						SCString M1TimeString , currentTimeString;
+						
+						SCDateTime m1time = DateTimeArray[i] ;
+						m1time.GetDateTimeYMDHMS(Year, Month, Day, Hour, Minute, Second);
+						M1TimeString.Format("%04d.%02d.%02d %02d:%02d", Year, Month, Day, Hour, Minute);						
+						
+						SCDateTime currentTime = sc.CurrentSystemDateTime;
+						currentTime.GetDateTimeYMDHMS(Year, Month, Day, Hour, Minute, Second);						
+						currentTimeString.Format("%04d.%02d.%02d %02d:%02d", Year, Month, Day, Hour, Minute);
+						
+						
+						if (Index == sc.ArraySize - 1 - 1) 
+						{
+									
+							sendHttpPostMessage( sc, uniqNumber ,  signal ,  M1TimeString , currentTimeString) ;
+							
+						}		
+		
 						break;
 					}
 				}
 				
 				
-			}
-			
-			
-			
-		
-			
+			}		
 			
 				
 		}
 	
-	}
-	
-	
-	
-	int currentIndex = sc.UpdateStartIndex ;
-
-	if(currentIndex >= sc.DataStartIndex && sc.Subgraph[0][currentIndex-1] == 1 && signal != 0)
-	{
-		int Year, Month, Day, Hour, Minute, Second;
-		time.GetDateTimeYMDHMS(Year, Month, Day, Hour, Minute, Second);
-
-		SCString TimeString;
-		TimeString.Format("%04d-%02d-%02d %02d:%02d:%02d", Year, Month, Day, Hour, Minute, Second);
-		
-		if(uniqNumber >= 5430) uniqNumber = 1000;
-		
-		count++;
-		uniqNumber += count;
-
-		SCString postData;
-		postData.Format("{\"uniq\": %d, \"signal\": %d , \"time\": \"%s\"}" , uniqNumber , signal , TimeString.GetChars() ) ;
-
-		const char* serverURL = "http://localhost:8000/simplesignal";
-		
-		
-		 n_ACSIL::s_HTTPHeader HTTPHeader;
-		HTTPHeader.Name = "Content-Type";
-		HTTPHeader.Value = "application/json";
-
-		if (!sc.MakeHTTPPOSTRequest(serverURL, postData.GetChars(), &HTTPHeader, 1))
-		{
-			sc.AddMessageToLog("Error making HTTP request.", 0);
-		}
-		else
-		{
-			sc.AddMessageToLog("HTTP request sent successfully.", 0);
-
-		
-		}
 	}	
-	else if(currentIndex >= sc.DataStartIndex && sc.Subgraph[1][currentIndex-1] == 1 && signal != 0 )
-	{
-		int Year, Month, Day, Hour, Minute, Second;
-		time.GetDateTimeYMDHMS(Year, Month, Day, Hour, Minute, Second);
-
-		SCString TimeString;
-		TimeString.Format("%04d-%02d-%02d %02d:%02d:%02d", Year, Month, Day, Hour, Minute, Second);
-		
-		if(uniqNumber >= 5430) uniqNumber = 1000;
-		
-		count++;
-		uniqNumber += count;
-
-		SCString postData;
-		postData.Format("{\"uniq\": %d, \"signal\": %d , \"time\": \"%s\"}" , uniqNumber , signal , TimeString.GetChars() ) ;
-
-		const char* serverURL = "http://localhost:8000/simplesignal";
-		
-		
-		 n_ACSIL::s_HTTPHeader HTTPHeader;
-		HTTPHeader.Name = "Content-Type";
-		HTTPHeader.Value = "application/json";
-
-		if (!sc.MakeHTTPPOSTRequest(serverURL, postData.GetChars(), &HTTPHeader, 1))
-		{
-			sc.AddMessageToLog("Error making HTTP request.", 0);
-		}
-		else
-		{
-			sc.AddMessageToLog("HTTP request sent successfully.", 0);
-
-		
-		}
-		
-	}	
-		
-	
 	
 	
 }
+
+
+
+void sendHttpPostMessage( SCStudyInterfaceRef sc ,int uniqNumber , int signal , SCString m1TimeString , SCString currentTimeString)
+{
+	SCString postData;
+	
+	postData.Format("{\"uniq\": %d, \"signal\": %d , \"m1time\": \"%s\", \"currenttime\": \"%s\"}" , 
+                uniqNumber, signal, m1TimeString.GetChars(), currentTimeString.GetChars());
+
+	const char* serverURL = "http://localhost:8000/simplesignal";
+	
+	
+	 n_ACSIL::s_HTTPHeader HTTPHeader;
+	HTTPHeader.Name = "Content-Type";
+	HTTPHeader.Value = "application/json";
+
+	if (!sc.MakeHTTPPOSTRequest(serverURL, postData.GetChars(), &HTTPHeader, 1))
+	{
+		sc.AddMessageToLog("Error making HTTP request.", 0);
+	}
+	else
+	{
+		sc.AddMessageToLog("HTTP request sent successfully.", 0);						
+	}
+	
+}
+
+
 
 
 
