@@ -1,0 +1,428 @@
+
+
+
+
+
+
+
+
+
+#include "sierrachart.h"
+
+
+SCDLLName("Send Simple Signal To M5 DLL")
+
+void sendHttpPostMessage( SCStudyInterfaceRef sc ,int uniqNumber , int signal , SCString m1TimeString , SCString currentTimeString) ;
+
+
+SCSFExport scsf_SimpleVolRangeBar(SCStudyInterfaceRef sc)
+{
+	
+	int M1ChartNumber = 7;         // M1 is chart 7
+	int uniqNumber = 5445;
+	
+	
+	// Section 1 - Set the configuration variables and defaults
+	if (sc.SetDefaults)
+	{
+		sc.GraphName = "Simple Vol Range Bar ";
+
+		sc.AutoLoop = 0;  //Automatic looping is enabled. 
+		
+		sc.GraphRegion = 2;
+		
+		sc.Subgraph[0].Name = "Buy SIGNAL";
+		sc.Subgraph[0].DrawStyle = DRAWSTYLE_BAR;
+        sc.Subgraph[0].LineWidth = 7;
+		
+		sc.Subgraph[1].Name = "SELL SIGNAL";
+		sc.Subgraph[1].DrawStyle = DRAWSTYLE_BAR;
+        sc.Subgraph[1].LineWidth = 7;
+		
+		return;
+	}
+	
+	
+	int& count = sc.GetPersistentInt(0);
+	sc.SetPersistentInt(0, 0);
+	//count = 0;
+	//int& uniqNumber = sc.GetPersistentInt(1);
+	//sc.SetPersistentInt(1, 5414);
+	
+	//int uniqNumber = 5414;
+
+	
+	SCDateTimeArray DateTimeArray;
+    sc.GetChartDateTimeArray(M1ChartNumber, DateTimeArray); 
+
+	SCGraphData M1GraphData;
+    // Get the base graph data from the specified chart
+    sc.GetChartBaseData(M1ChartNumber, M1GraphData);
+
+    // Define a reference to the High array
+    SCFloatArrayRef HighArrayM1 = M1GraphData[SC_HIGH];
+	SCFloatArrayRef LowArrayM1 = M1GraphData[SC_LOW];
+	SCFloatArrayRef OpenArrayM1 = M1GraphData[SC_OPEN];
+	SCFloatArrayRef CloseArrayM1 = M1GraphData[SC_LAST];
+
+	 int currentM1Index = OpenArrayM1.GetArraySize() - 1;
+	int lastM1Index = currentM1Index-1 ;
+	
+	float volume = 0;
+	float low = 0;
+	float high = 0;
+	int signal = 0;   // -1 mean sell    , 1 mean buy
+	SCDateTime time;
+		
+		
+	SCString message;	
+	
+	
+	if (DateTimeArray.GetArraySize() == 0)  return;  
+	
+
+	
+	// Do data processing
+    for (int Index = sc.UpdateStartIndex; Index < sc.ArraySize; Index++)
+    {    
+		
+		//if(Index == 0) continue ;
+		
+		if(sc.GetBarHasClosedStatus(Index)==BHCS_BAR_HAS_NOT_CLOSED)
+		{
+
+			return;//do not do any processing if the bar at  the current index has not closed
+		}
+
+		
+		signal = 0; 
+		
+		int RefChartIndex =sc.GetNearestMatchForDateTimeIndex(M1ChartNumber,Index);
+				
+				
+		if( sc.Volume[Index] >= 2*sc.Volume[Index-1])
+		{
+			
+				
+			if( sc.PriceValueToTicks(sc.Close[Index]) - sc.PriceValueToTicks(sc.Low[Index]) > 0)   // up
+			{
+				sc.Subgraph[0][Index] = 1;
+				signal = 1;
+				low = sc.Low[Index] ;
+				high = sc.High[Index] ;
+				
+				int lowInTick = sc.PriceValueToTicks(low) ;
+				int lowM1InTick = -1 ;
+				
+				
+				for(int i = RefChartIndex ; i >=0 ; i--)
+				{
+					lowM1InTick = sc.PriceValueToTicks(LowArrayM1[i]) ;
+					if( lowInTick ==  lowM1InTick) 
+					{
+						uniqNumber += Index;															
+						
+						message.Format("BUY | index range = %d , uniq = %d" , Index , uniqNumber   ); // sc.CurrentSystemDateTime
+						sc.AddMessageToLog(message, 0);
+						
+						SCString DateTimeString = "time m1 = " ; 
+						DateTimeString += sc.DateTimeToString(DateTimeArray[i],FLAG_DT_COMPLETE_DATETIME);
+						
+						sc.AddMessageToLog(DateTimeString, 0);
+						
+						int Year, Month, Day, Hour, Minute, Second;
+						
+
+						SCString M1TimeString , currentTimeString;
+						
+						SCDateTime m1time = DateTimeArray[i] ;
+						m1time.GetDateTimeYMDHMS(Year, Month, Day, Hour, Minute, Second);
+						M1TimeString.Format("%04d.%02d.%02d %02d:%02d", Year, Month, Day, Hour, Minute);						
+						
+						SCDateTime currentTime = sc.CurrentSystemDateTime;
+						currentTime.GetDateTimeYMDHMS(Year, Month, Day, Hour, Minute, Second);						
+						currentTimeString.Format("%04d.%02d.%02d %02d:%02d", Year, Month, Day, Hour, Minute);
+						
+						
+						if (Index == sc.ArraySize - 1 - 1) 
+						{
+									
+							sendHttpPostMessage( sc, uniqNumber ,  signal ,  M1TimeString , currentTimeString) ;
+							
+						}		
+		
+						break;
+					}
+				}
+			
+			}				
+				
+			else if(sc.PriceValueToTicks(sc.Close[Index]) - sc.PriceValueToTicks(sc.Low[Index]) <= 0)   // down
+			{
+				sc.Subgraph[1][Index] = 1;
+				signal = -1;
+				low = sc.Low[Index] ;
+				high = sc.High[Index] ;
+				
+				int highInTick = sc.PriceValueToTicks(high) ;
+				int highM1InTick = -1 ;
+				
+				for(int i = RefChartIndex ; i >=0 ; i--)
+				{
+					highM1InTick = sc.PriceValueToTicks(HighArrayM1[i]) ;
+					if( highInTick ==  highM1InTick) 
+					{
+						uniqNumber += Index;															
+						
+						message.Format("SELL | index range = %d , uniq = %d" , Index , uniqNumber   ); // sc.CurrentSystemDateTime
+						sc.AddMessageToLog(message, 0);
+						
+						SCString DateTimeString = "time m1 = " ; 
+						DateTimeString += sc.DateTimeToString(DateTimeArray[i],FLAG_DT_COMPLETE_DATETIME);
+						
+						sc.AddMessageToLog(DateTimeString, 0);
+						
+						int Year, Month, Day, Hour, Minute, Second;
+						
+
+						SCString M1TimeString , currentTimeString;
+						
+						SCDateTime m1time = DateTimeArray[i] ;
+						m1time.GetDateTimeYMDHMS(Year, Month, Day, Hour, Minute, Second);
+						M1TimeString.Format("%04d.%02d.%02d %02d:%02d", Year, Month, Day, Hour, Minute);						
+						
+						SCDateTime currentTime = sc.CurrentSystemDateTime;
+						currentTime.GetDateTimeYMDHMS(Year, Month, Day, Hour, Minute, Second);						
+						currentTimeString.Format("%04d.%02d.%02d %02d:%02d", Year, Month, Day, Hour, Minute);
+						
+						
+						if (Index == sc.ArraySize - 1 - 1) 
+						{
+									
+							sendHttpPostMessage( sc, uniqNumber ,  signal ,  M1TimeString , currentTimeString) ;
+							
+						}		
+		
+						break;
+					}
+				}
+				
+				
+			}		
+			
+				
+		}
+	
+	}	
+	
+	
+}
+
+
+
+void sendHttpPostMessage( SCStudyInterfaceRef sc ,int uniqNumber , int signal , SCString m1TimeString , SCString currentTimeString)
+{
+	SCString postData;
+	
+	postData.Format("{\"uniq\": %d, \"signal\": %d , \"m1time\": \"%s\", \"currenttime\": \"%s\"}" , 
+                uniqNumber, signal, m1TimeString.GetChars(), currentTimeString.GetChars());
+
+	const char* serverURL = "http://localhost:8000/simplesignal";
+	
+	
+	 n_ACSIL::s_HTTPHeader HTTPHeader;
+	HTTPHeader.Name = "Content-Type";
+	HTTPHeader.Value = "application/json";
+
+	if (!sc.MakeHTTPPOSTRequest(serverURL, postData.GetChars(), &HTTPHeader, 1))
+	{
+		sc.AddMessageToLog("Error making HTTP request.", 0);
+	}
+	else
+	{
+		sc.AddMessageToLog("HTTP request sent successfully.", 0);						
+	}
+	
+}
+
+
+
+
+
+
+
+// ***************************************************************************************************************************
+
+
+
+
+from fastapi import FastAPI
+from pydantic import BaseModel
+import uvicorn
+import zmq
+import time
+
+app = FastAPI()
+
+# สร้าง context และ socket
+context = zmq.Context()
+socket = context.socket(zmq.REQ)  # ใช้ REQ (Request) socket
+socket.connect("tcp://localhost:5557")  # เชื่อมต่อไปยัง MT5
+
+
+latest_signal = {
+    "uniq": None,
+    "signal": None,
+    "m1time": None,
+    "currenttime": None
+}
+
+    
+class Signal(BaseModel):
+    uniq: int
+    signal: int
+    m1time: str
+    currenttime: str
+
+
+
+
+@app.post("/simplesignal")
+async def simplesignal(sig: Signal):
+    global latest_signal
+    latest_signal = {
+        "uniq": sig.uniq,
+        "signal": sig.signal,
+        "m1time": sig.m1time,
+        "currenttime": sig.currenttime
+    }
+    print(f"Received signal - unique number: {sig.uniq}, signal: {sig.signal}, M1 Time: {sig.m1time}, Now Time: {sig.currenttime}")
+    
+    try:
+        # ส่งค่าตัวแปร a และ b ไปยัง MT5
+        message = f"{sig.uniq},{sig.signal},{sig.m1time},{sig.currenttime}"
+        print(f"Sending message: {message}")
+        socket.send_string(message)
+
+        # รับผลลัพธ์ที่ MT5 ส่งกลับ
+        result = socket.recv_string()
+        print(f"ผลลัพธ์ที่ได้รับจาก MT5: {result}")
+
+        # รอ 5 วินาที
+        #time.sleep(5)
+
+        # เพิ่มค่า i
+        #i += 1
+    except Exception as e:
+        print(f"เกิดข้อผิดพลาด: {e}")
+        
+    
+    return {"status": "success", "received_signala": latest_signal}
+
+
+
+
+@app.get("/simplesignal")
+async def get_signal():
+    return {"status": "ready", "latest_signal": latest_signal}
+
+
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+    
+
+
+
+
+
+
+// ***************************************************************************************************************************
+
+
+
+
+
+#include <Zmq/Zmq.mqh>
+
+int i = 0;  // ตัวแปรที่ใช้เพิ่มค่า
+Context context("mt5server");
+Socket socket(context, ZMQ_REP);  // ใช้ REP (Reply) socket
+
+void OnInit()
+{
+    if (!socket.bind("tcp://*:5557"))  // ผูก socket กับพอร์ต 5556
+    {
+        Print("ไม่สามารถผูก socket กับพอร์ต 5556");
+    }
+    else
+    {
+        Print("MT5 server started and listening on port 5556");
+    }
+}
+
+void OnTick()
+{
+    ZmqMsg request;
+    if (socket.recv(request))  // ตรวจสอบว่ามีข้อความจาก Python หรือไม่
+    {
+        // แปลงข้อความที่รับเป็นสตริง
+        string request_str = request.getData();
+        Print("Received data: ", request_str);
+
+        string arr[];
+        StringSplit(request_str, ',', arr);
+
+        if (ArraySize(arr) == 4)
+        {
+            // แปลงข้อความเป็นตัวเลข
+            int uniq = StringToInteger(arr[0]);
+            int signal = StringToInteger(arr[1]);
+            string m1TimeString = arr[2] ;
+            string currentTimeString = arr[3] ;
+
+            // คำนวณผลลัพธ์
+            int result = uniq*signal*10 ;
+
+            // เพิ่มค่า i
+            i += 1;
+
+            // ส่งผลลัพธ์กลับไปยัง Python
+            ZmqMsg reply(IntegerToString(result));
+            socket.send(reply);
+            
+            Print("Sent result: ", IntegerToString(result));
+            Print("signal num: ", IntegerToString(signal));
+            Print("m1 time: ", m1TimeString );
+            Print("current time: ", currentTimeString );
+        }
+        else
+        {
+            Print("ข้อมูลที่ได้รับไม่ถูกต้อง: ", request_str);
+        }
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
