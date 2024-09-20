@@ -3,6 +3,13 @@
 
 
 
+
+
+
+
+
+
+
 #include "sierrachart.h"
 
 
@@ -17,8 +24,8 @@ SCDLLName("Send Simple Signal To M5 DLL")
 
 void sendHttpPostMessage( SCStudyInterfaceRef sc ,int uniqNumber , int signal , SCString m1TimeString , SCString currentTimeString) ;
 
-bool get_M1Time_currentTime_String(SCStudyInterfaceRef sc ,int M1ChartNumber , int IndexOfSL , int signal , 
-									SCString& m1TimeString , SCString& currentTimeString  )  ;
+bool get_M1Time_currentTime_String(SCStudyInterfaceRef sc ,int M1ChartNumber , int IndexOfSL , int IndexOfEndBar , int signal , 
+									SCString& m1TimeString , SCString& currentTimeString  ) ;
 
 SCSFExport scsf_SimpleVolRangeBar(SCStudyInterfaceRef sc)
 {
@@ -126,14 +133,14 @@ SCSFExport scsf_SimpleVolRangeBar(SCStudyInterfaceRef sc)
 			message.Format("BUY | index range = %d , uniq = %d" , currentIndex-1 , persistentUniqueValue   ); // sc.CurrentSystemDateTime
 			sc.AddMessageToLog(message, 0);
 				
-			bool isTimeCorrect = get_M1Time_currentTime_String( sc ,M1ChartNumber , currentIndex-1 , signal , m1TimeString , currentTimeString ) ;
+			bool isTimeCorrect = get_M1Time_currentTime_String( sc ,M1ChartNumber , currentIndex-1 , currentIndex-1 , signal , m1TimeString , currentTimeString ) ;
 			
 			if ( isTimeCorrect ) 
 			{
-				if (sc.IsFullRecalculation) return;
-										
-				sendHttpPostMessage( sc, persistentUniqueValue ,  signal ,  m1TimeString , currentTimeString) ;
-				
+				if (!sc.IsFullRecalculation) 
+				{
+					sendHttpPostMessage( sc, persistentUniqueValue ,  signal ,  m1TimeString , currentTimeString) ;
+				}
 				
 			}		
 				
@@ -161,13 +168,16 @@ SCSFExport scsf_SimpleVolRangeBar(SCStudyInterfaceRef sc)
 			message.Format("SELL | index range = %d , uniq = %d" , currentIndex-1 , persistentUniqueValue   ); // sc.CurrentSystemDateTime
 			sc.AddMessageToLog(message, 0);
 				
-			bool isTimeCorrect = get_M1Time_currentTime_String( sc ,M1ChartNumber , currentIndex-1 , signal , m1TimeString , currentTimeString ) ;
+			bool isTimeCorrect = get_M1Time_currentTime_String( sc ,M1ChartNumber , currentIndex-1 , currentIndex-1 , signal , m1TimeString , currentTimeString ) ;
 								
 			if ( isTimeCorrect ) 
 			{
-				if (sc.IsFullRecalculation) return;				
+				if (!sc.IsFullRecalculation) 
+				{
+					sendHttpPostMessage( sc, persistentUniqueValue ,  signal ,  m1TimeString , currentTimeString) ;
+				}
 						
-				sendHttpPostMessage( sc, persistentUniqueValue ,  signal ,  m1TimeString , currentTimeString) ;
+				
 			}	
 		}
 		
@@ -205,7 +215,7 @@ void sendHttpPostMessage( SCStudyInterfaceRef sc ,int uniqNumber , int signal , 
 	
 }
 
-bool get_M1Time_currentTime_String(SCStudyInterfaceRef sc ,int M1ChartNumber , int IndexOfSL , int signal , 
+bool get_M1Time_currentTime_String(SCStudyInterfaceRef sc ,int M1ChartNumber , int IndexOfSL , int IndexOfEndBar , int signal , 
 									SCString& m1TimeString , SCString& currentTimeString  )
 {
 	
@@ -258,9 +268,9 @@ bool get_M1Time_currentTime_String(SCStudyInterfaceRef sc ,int M1ChartNumber , i
 				m1time.GetDateTimeYMDHMS(Year, Month, Day, Hour, Minute, Second);
 				m1TimeString.Format("%04d.%02d.%02d %02d:%02d", Year, Month, Day, Hour, Minute);						
 				
-				SCDateTime currentTime = sc.CurrentSystemDateTime;
+				SCDateTime currentTime = sc.BaseDateTimeIn[IndexOfEndBar + 1];    //sc.CurrentSystemDateTime;
 				currentTime.GetDateTimeYMDHMS(Year, Month, Day, Hour, Minute, Second);						
-				currentTimeString.Format("%04d.%02d.%02d %02d:%02d", Year, Month, Day, Hour, Minute);
+				currentTimeString.Format("%04d.%02d.%02d %02d:%02d:%02d", Year, Month, Day, Hour, Minute, Second);
 			
 				return true;
 				
@@ -296,9 +306,9 @@ bool get_M1Time_currentTime_String(SCStudyInterfaceRef sc ,int M1ChartNumber , i
 				m1time.GetDateTimeYMDHMS(Year, Month, Day, Hour, Minute, Second);
 				m1TimeString.Format("%04d.%02d.%02d %02d:%02d", Year, Month, Day, Hour, Minute);						
 				
-				SCDateTime currentTime = sc.CurrentSystemDateTime;
+				SCDateTime currentTime = sc.BaseDateTimeIn[IndexOfEndBar + 1];   
 				currentTime.GetDateTimeYMDHMS(Year, Month, Day, Hour, Minute, Second);						
-				currentTimeString.Format("%04d.%02d.%02d %02d:%02d", Year, Month, Day, Hour, Minute);				
+				currentTimeString.Format("%04d.%02d.%02d %02d:%02d:%02d", Year, Month, Day, Hour, Minute, Second);		
 				
 
 				return true;
@@ -313,6 +323,11 @@ bool get_M1Time_currentTime_String(SCStudyInterfaceRef sc ,int M1ChartNumber , i
 	
 	
 }
+
+
+
+
+
 
 
 
@@ -410,6 +425,8 @@ if __name__ == "__main__":
 
 
 // #################################################################################################################################
+
+
 
 
 
@@ -524,6 +541,10 @@ void OnTick()
             Print("M1 Low:",DoubleToString(lowM1) );
             Print("M1 High:",DoubleToString(highM1) );
             Print("current time: ", currentTimeStringSierraChart );
+            
+            datetime currentTimeMT5 = TimeCurrent();
+            int timeDiff = currentTimeMT5 - (currentTimeSierraChart - t1) ;
+            Print("time diff :",IntegerToString(timeDiff) );
             //Print("t1:",IntegerToString(t1) );
         }
         else
@@ -614,15 +635,6 @@ int diffTimeSierraChartAndMT5(datetime currentTimeSierraChart  )
    return -1;
    
 }
-
-
-
-
-
-
-
-
-
 
 
 
