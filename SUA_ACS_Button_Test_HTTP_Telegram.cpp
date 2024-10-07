@@ -479,42 +479,34 @@ void OnTick()
              onePips = MathPow(10, -1*digits)*10 ;
              onePips = NormalizeDouble(onePips,digits);
             
-            getNumberOfPositionNow(symbol , buy_count,sell_count);
+           
             
             
             if(uniq >= 500000 )
             {               
-               if(signal == 1 && allowTrade )
+                                               
+               if(signal == 1  )
                {
+                  double last_price = SymbolInfoDouble(symbol, SYMBOL_ASK);
                   double sl = lowM1 - onePips ;
+                  double tp = last_price + 30*onePips ;
                   sl = NormalizeDouble(sl,digits); 
+                  tp = NormalizeDouble(tp,digits); 
                      
-                  if(sell_count <= 0 ||
-                     (sell_count > 0 && allowHedgeTrade)  )
-                  {                     
-                     trade.Buy(0.01,symbol , 0  , sl) ;
-                  }
-                  else 
-                  {
-                     Print("having sell now and hedging not allow !!");
-                  }
+                  openPosition( symbol ,  0.01 ,  signal ,  sl ,  tp , allowTrade ,  allowHedgeTrade ,  allowNewsTrade) ;
                   
                   
                }
-               else if(signal == -1 && allowTrade )
+               else if(signal == -1 )
                {
+                  double last_price = SymbolInfoDouble(symbol, SYMBOL_BID);
                   double sl = highM1 + onePips ;
+                  double tp = last_price - 30*onePips ;
                   sl = NormalizeDouble(sl,digits); 
+                  tp = NormalizeDouble(tp,digits); 
+                     
+                  openPosition( symbol ,  0.01 ,  signal ,  sl ,  tp , allowTrade ,  allowHedgeTrade ,  allowNewsTrade) ;
                   
-                  if(buy_count <= 0 ||
-                     (buy_count > 0 && allowHedgeTrade)  )
-                  {                     
-                     trade.Sell(0.01,symbol , 0 , sl) ;
-                  }
-                  else 
-                  {
-                     Print("having buy now and hedging not allow !!");
-                  }                  
                   
                }
                else if(signal == 1 && allowTrade == false )
@@ -690,6 +682,65 @@ void getNumberOfPositionNow(string mySymbol , int& buy_count , int& sell_count)
 
 
 }
+
+
+
+void openPosition(string symbol , double lot , int signal , double sl , double tp ,
+                 bool allowTrade , bool allowHedgeTrade , bool allowNewsTrade)
+{
+   
+   int buy_count = -1 ;
+   int sell_count = -1 ;
+   
+    getNumberOfPositionNow(symbol , buy_count, sell_count);
+
+   if(signal == 1 && allowTrade )
+   {
+               
+      if(sell_count <= 0 ||
+         (sell_count > 0 && allowHedgeTrade)  )
+      {                     
+         trade.Buy(lot,symbol , 0  , sl , tp) ;
+      }
+      else 
+      {
+         Print("having sell now and hedging not allow !!");
+      }
+      
+      
+   }
+   else if(signal == -1 && allowTrade )
+   {
+          
+      if(buy_count <= 0 ||
+         (buy_count > 0 && allowHedgeTrade)  )
+      {                     
+         trade.Sell(lot,symbol , 0 , sl) ;
+      }
+      else 
+      {
+         Print("having buy now and hedging not allow !!");
+      }                  
+      
+   }
+   else if(signal == 1 && allowTrade == false )
+   {
+      Print("buy signal");
+      Print("HTTP and Socket work fine !!!");
+   }
+   else if(signal == -1 && allowTrade == false )
+   {
+      Print("sell signal");
+      Print("HTTP and Socket work fine !!!");
+   }
+
+}            
+ 
+
+
+
+
+
 
 
 
