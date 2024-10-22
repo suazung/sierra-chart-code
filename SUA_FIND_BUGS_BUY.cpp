@@ -5,6 +5,9 @@
 
 
 
+
+
+
 // The top of every source code file must include this line
 #include "sierrachart.h"
 #include <vector>            // For using std::vector
@@ -83,7 +86,7 @@ int findHowManyBugBarBefore(SCStudyInterfaceRef sc , int idx , int num ) ;
 
 int getLastDiffBugBarBefore(SCStudyInterfaceRef sc , int idx , int num );
 
-
+int getLastDiffGoodSellBugBarBefore(SCStudyInterfaceRef sc , int idx , int num )  ;
 
 
 void simTrade(SCStudyInterfaceRef sc , std::vector<st_BugsUpBar>& detectBugBuy , std::vector<st_SimTrade>& detectTrade)  ;
@@ -341,6 +344,7 @@ SCSFExport scsf_FindBugsBuy(SCStudyInterfaceRef sc)
 			
 			int diff_bug_bar_10 = getLastDiffBugBarBefore( sc , ix , 10 )  ;
 			
+			int diff_GS_bug_bar_4  = getLastDiffGoodSellBugBarBefore(sc , ix , 4 )  ;
 										
 			// Write the data to the file
 			outputFile << "Trade: " << i+1 ;
@@ -359,6 +363,7 @@ SCSFExport scsf_FindBugsBuy(SCStudyInterfaceRef sc)
 			
 			
 			if(DayOfWeek == 1 && t1.GetHour() <= 2) continue;  
+			//if(t1.GetHour() >= 21 && t1.GetMinute() >= 50 ) continue; 
 			if(t1.GetHour() <= 1) continue;
 			if(t1.GetHour() >= 23) continue;
 			if(bar_sec == 0)  continue;
@@ -370,6 +375,7 @@ SCSFExport scsf_FindBugsBuy(SCStudyInterfaceRef sc)
 			if(pos3 == 1 || pos3 == 6 || pos3 == 7)  continue;  
 			if(pos25 >= 64 && pos25 <= 67)  continue;  
 			if(diff_bug_bar_10 >= 8 && diff_bug_bar_10 != 10000)  continue;
+			if(diff_GS_bug_bar_4 >= -4 && diff_GS_bug_bar_4 <= -2)  continue;    
 			
 			
 			/*if(bar_sec == 0)  continue;
@@ -552,7 +558,7 @@ void simTrade(SCStudyInterfaceRef sc , std::vector<st_BugsUpBar>& detectBugBuy ,
 		float bar_sec = temp.GetTimeInSeconds() ;
 		
 				
-		int num = 10;              //20
+		int num = 4;              // 10 ,20
 		int cnt_good_sell = 0;
 		for(int i = buyIndex-1 ; i >= buyIndex-num ; i--)
 		{
@@ -596,6 +602,8 @@ void simTrade(SCStudyInterfaceRef sc , std::vector<st_BugsUpBar>& detectBugBuy ,
 		
 		int diff_bug_bar_10 = getLastDiffBugBarBefore( sc , buyIndex , 10 )  ;
 		
+		int diff_GS_bug_bar_4  = getLastDiffGoodSellBugBarBefore(sc , buyIndex , 4 )  ;
+		
 		outputFile << "Trade: " << detectTrade[i].tradeNumber ;
 		outputFile << ", ix : " << buyIndex ;
 		//outputFile << ", touch vwap8 : " << num_touch_vwap_last_8 ;
@@ -614,7 +622,8 @@ void simTrade(SCStudyInterfaceRef sc , std::vector<st_BugsUpBar>& detectBugBuy ,
 		outputFile << " , div cum vol: " << div_cum_vol  ; 
         outputFile << " , brkHigh: " << brkHigh  ;    	
 		//outputFile << " , touch bug: " << num_touch_bug_bar_10  ;
-		outputFile << " , dff bug: " << diff_bug_bar_10 ;  		
+		//outputFile << " , dff bug: " << diff_bug_bar_10 ;  		
+		outputFile << " , dff GS: " << diff_GS_bug_bar_4 ; 
 		outputFile << " , result: " << rs ;
 		outputFile << " , best move : " << howMuchMove << "T" ;
 		outputFile << " , date: " << date ;
@@ -858,6 +867,32 @@ int getLastDiffBugBarBefore(SCStudyInterfaceRef sc , int idx , int num )
 	return 10000;
 	
 }
+
+
+int getLastDiffGoodSellBugBarBefore(SCStudyInterfaceRef sc , int idx , int num )
+{
+		
+	// for good Sell OF
+	SCFloatArray goodSellArray;
+	sc.GetStudyArrayUsingID(9 , 0, goodSellArray);
+	            // 10 ,20
+	int cnt_good_sell = 0;
+
+	for(int i = idx-1 ; i >= idx-num ; i--)
+	{
+		if(goodSellArray[i] == 1) 
+		{
+			cnt_good_sell++;
+			int lowofLastGoodSell = sc.PriceValueToTicks(sc.Low[i]) ;
+			int highOfBugBar = sc.PriceValueToTicks(sc.High[idx]) ;
+			return lowofLastGoodSell-highOfBugBar ;
+			
+		}
+	}
+	return 10000;
+	
+}
+
 
 
 
